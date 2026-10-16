@@ -1069,6 +1069,14 @@
                 st.savedTotal = Math.round(series.reduce((a,d)=>a+saved(d),0));
                 st.savedCigsTotal = Math.round(series.reduce((a,d)=>a+(baseline - d.count),0));
             }
+            // GOAL_SAVINGS_V4: 목표를 지켰을 때의 예상 절약 = (기준 - 목표) × 개비당 가격 → 목표에 따라 바뀜
+            if (baseline != null && goal != null) {
+                const perDayCigs = Math.round((baseline - goal) * 10) / 10;
+                st.goalCigsPerDay = perDayCigs;
+                st.goalSaveDay = Math.round(perDayCigs * PRICE_PER_CIGARETTE);
+                st.goalSaveMonth = Math.round(perDayCigs * 30 * PRICE_PER_CIGARETTE);
+                st.goalSaveYear = Math.round(perDayCigs * 365 * PRICE_PER_CIGARETTE);
+            }
             return st;
         }
 
@@ -1113,6 +1121,17 @@
                 const cell = (label, v) => `<div class="bg-zinc-900/60 rounded-2xl p-2"><div class="text-xs text-zinc-400">${label}</div><div class="text-base font-bold ${v >= 0 ? 'text-emerald-400' : 'text-zinc-300'}">${wonText(v)}</div></div>`;
                 html += `<div class="mt-4"><div class="text-xs text-zinc-400 mb-1">${L(`기준(하루 ${st.baseline}개비) 대비 절약`, `Saved vs. baseline (${st.baseline}/day)`)}</div>
                     <div class="grid grid-cols-3 gap-2 text-center">${cell(L('오늘', 'Today'), st.savedToday)}${cell(L('이번 달', 'This month'), st.savedMonth)}${cell(L('누적', 'Total'), st.savedTotal)}</div>`;
+                if (st.goalSaveDay != null) {
+                    if (st.goalSaveDay > 0) html += `<div id="goal-projection" class="mt-3 bg-zinc-900/60 rounded-2xl p-3">
+                        <div class="text-xs text-zinc-400 mb-1">${L(`목표(하루 ${st.goal}개비)를 지키면 예상 절약`, `If you keep your goal (${st.goal}/day), expected savings`)}</div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div><div class="text-xs text-zinc-400">${L('하루', 'Per day')}</div><div class="text-base font-bold text-emerald-400" data-gs="day">${wonText(st.goalSaveDay)}</div></div>
+                            <div><div class="text-xs text-zinc-400">${L('한 달(30일)', 'Month (30d)')}</div><div class="text-base font-bold text-emerald-400" data-gs="month">${wonText(st.goalSaveMonth)}</div></div>
+                            <div><div class="text-xs text-zinc-400">${L('1년', 'Year')}</div><div class="text-base font-bold text-emerald-400" data-gs="year">${wonText(st.goalSaveYear)}</div></div>
+                        </div>
+                        <div class="text-xs text-zinc-500 mt-1">${L(`기준 ${st.baseline}개비 − 목표 ${st.goal}개비 = 하루 ${st.goalCigsPerDay}개비 × ${PRICE_PER_CIGARETTE}원`, `Baseline ${st.baseline} − goal ${st.goal} = ${st.goalCigsPerDay}/day × ₩${PRICE_PER_CIGARETTE}`)}</div></div>`;
+                    else html += `<p id="goal-projection" class="text-xs text-zinc-400 mt-2">${L(`목표(${st.goal}개비)가 기준(${st.baseline}개비) 이상이라 목표를 지켜도 추가 절약은 없어요. 목표를 기준보다 낮게 잡아 보세요.`, `Your goal (${st.goal}) is at or above the baseline (${st.baseline}), so keeping it saves nothing extra. Try a goal below the baseline.`)}</p>`;
+                }
                 if (st.savedTotal < 0) html += `<p class="text-xs text-zinc-400 mt-2">${L('지금까지는 기준보다 조금 더 피운 편이에요. 괜찮아요, 오늘부터 한 개비씩 줄여봐요.', 'So far you have smoked a bit more than your baseline. That is okay, try cutting one at a time from today.')}</p>`;
                 else if (st.savedToday < 0) html += `<p class="text-xs text-zinc-400 mt-2">${L('오늘은 기준보다 조금 많아요. 남은 시간 천천히 가봐요.', 'A bit above your baseline today. Take it slow for the rest of the day.')}</p>`;
                 html += `</div>`;
@@ -1167,6 +1186,7 @@
                 let worst = -1; wf.forEach((v,i) => { if (wn[i] >= 2 && (worst < 0 || v/wn[i] > wf[worst]/wn[worst])) worst = i; });
                 if (worst >= 0 && wf[worst] > 0) lines.push(L(`${WEEKDAYS[worst]}요일에 목표를 넘기는 경우가 가장 많아요 (${wf[worst]}/${wn[worst]}회). 이 날 일정과 관련 있을 가능성이 있어요.`, `You go over most often on ${WD_EN[worst]} (${wf[worst]}/${wn[worst]} times). It may be related to that day\'s schedule.`));
             } else lines.push(L('기록 기간 동안 목표를 한 번도 넘기지 않았어요. 목표를 조금 낮춰봐도 좋겠어요!', 'You never went over the goal. Maybe try a slightly lower goal!'));
+            if (st.goalSaveDay > 0) lines.push(L(`목표를 지키면 기준 대비 하루 약 ${wonText(st.goalSaveDay)}, 한 달 약 ${wonText(st.goalSaveMonth)}을 아낄 수 있어요.`, `Keeping your goal would save about ${wonText(st.goalSaveDay)} per day, ${wonText(st.goalSaveMonth)} per month vs. baseline.`));
             if (st.baseline != null) lines.push(L(`기준 대비 누적 절약은 ${wonText(st.savedTotal)}이에요.`, `Total saved vs. baseline: ${wonText(st.savedTotal)}.`));
             return lines.slice(0, 5);
         }
