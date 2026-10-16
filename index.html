@@ -67,6 +67,7 @@
         html.light .login-pending { background: rgba(255,255,255,0.97); border-color: #ded5c7; color: #1c1917; }
         html.light .login-pending button { background: #ece5d9; color: #1c1917; }
         html.light .login-pending .lp-skip { background: none; color: #57534e; }
+        body.typing .tabbar { display: none; }
         .tab-off { display: none !important; }
         body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
         .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: space-around; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: rgba(24,24,27,0.92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-top: 1px solid #27272a; }
@@ -133,9 +134,17 @@
         function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
         function pendingRedirect() { try { return !!sessionStorage.getItem('smokingSyncRedirect'); } catch (e) { return false; } }
         document.getElementById('startSkip').onclick = function () { try { localStorage.setItem(SKIP, '1'); } catch (e) {} hide(); };
+        // START_LOGIN_FIX_V3: 팝업은 탭 이벤트 안에서 가장 먼저 열어야 Safari가 막지 않음
         document.getElementById('startLogin').onclick = function () {
-            hide();
-            if (window.CloudSync) CloudSync.login(); else alert(L('동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.', 'Couldn\'t load sync. Please check your internet connection.'));
+            var started = window.CloudSync ? CloudSync.login() : false;
+            if (started === true) { hide(); return; }
+            if (window.CloudSync) {   // SDK 아직 준비 안 됨: 화면 유지, 준비되면 다시 탭하도록 안내
+                var bt = this; bt.disabled = true; bt.style.opacity = '0.6';
+                var sp = bt.querySelector('span'); if (sp) sp.textContent = L('준비 중… 잠시 후 다시 눌러 주세요', 'Preparing… tap again in a moment');
+                window.addEventListener('sync-ready', function () { bt.disabled = false; bt.style.opacity = ''; if (sp) sp.textContent = L('Google로 로그인', 'Sign in with Google'); }, { once: true });
+                return;
+            }
+            hide(); alert(L('동기화 기능을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.', 'Couldn\'t load sync. Please check your internet connection.'));
         };
         // 로그인 상태가 되면 언제든 숨김
         window.addEventListener('sync-auth', function (e) { if (e.detail && e.detail.user) hide(); });
@@ -313,7 +322,8 @@
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hGoal">하루 목표 · 절약</h3>
             <div class="bg-zinc-800 rounded-3xl p-5">
                 <div id="goal-card-body"></div>
-                <details class="mt-4">
+                <p id="goal-saved" class="text-sm text-emerald-400 mt-2" hidden></p>
+                <details class="mt-4" id="goal-settings">
                     <summary class="text-sm text-zinc-400 cursor-pointer select-none" data-i18n="goalSet">⚙️ 목표 · 기준 설정</summary>
                     <div class="grid grid-cols-2 gap-3 mt-3">
                         <label class="text-xs text-zinc-400"><span data-i18n="goalLbl">하루 목표 (개비 이하)</span>
@@ -1127,7 +1137,13 @@
             saveGoalSettings();
             document.getElementById('goal-input').blur(); document.getElementById('baseline-input').blur();
             renderGoalCard(); refreshOpenReports();
+            const d = document.getElementById('goal-settings'); if (d) d.open = false;
+            const fbk = document.getElementById('goal-saved'); if (fbk) { fbk.textContent = L('저장했어요 ✓', 'Saved ✓'); fbk.hidden = false; clearTimeout(fbk._t); fbk._t = setTimeout(() => { fbk.hidden = true; }, 2500); }
         }
+        // GOAL_SAVE_FIX_V3: 키보드가 열려 있으면 하단 탭바가 키보드 위로 올라와 저장 버튼을 가림 → 입력 중엔 탭바 숨김
+        document.addEventListener('focusin', e => { if (e.target.matches && e.target.matches('input, textarea, select')) document.body.classList.add('typing'); });
+        document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!a || !a.matches || !a.matches('input, textarea, select')) document.body.classList.remove('typing'); }, 50));
+        ['goal-input', 'baseline-input'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveGoalFromInputs(); } }); });
 
         function buildGoalReport(recs, settings, todayStr) {
             if (!recs.length) return [L('아직 기록이 없어요. 기록이 쌓이면 목표 달성 패턴을 보여드릴게요.', 'No records yet. Once records build up, your goal patterns will show here.')];
@@ -1676,6 +1692,7 @@
                 popupRedirectResolver: authM.browserPopupRedirectResolver
             });
             fb = { authM, fsM, auth, db: fsM.getFirestore(app) };
+            window.dispatchEvent(new Event('sync-ready'));
             return fb;
         }
 
@@ -1801,10 +1818,10 @@
         }
 
         function login() {
-            if (!fb) {   // 아직 SDK가 안 불러와졌으면: 불러온 뒤 시도 (팝업이 막히면 한 번 더 누르면 바로 열림)
-                setStatus(L('로그인 준비 중…', 'Preparing login…'));
-                loadFirebase().then(() => { ensureWatch(); login(); }).catch(e => setStatus(errMsg(e), 'error'));
-                return;
+            if (!fb) {   // SDK가 아직 없으면 불러오기만 하고 한 번 더 누르게 함 (await 후 팝업은 Safari가 차단)
+                setStatus(L('로그인 준비 중… 잠시 후 다시 눌러 주세요.', 'Preparing login… please tap again in a moment.'));
+                loadFirebase().then(() => { ensureWatch(); setStatus(L('준비됐어요. 로그인 버튼을 다시 눌러 주세요.', 'Ready. Please tap the login button again.')); }).catch(e => setStatus(errMsg(e), 'error'));
+                return false;
             }
             const { authM, auth } = fb;
             const provider = new authM.GoogleAuthProvider();
@@ -1823,6 +1840,7 @@
                 } else { console.error(e); setStatus(isStandalone() && c.includes('internal') ? safariMsg() : errMsg(e), 'error'); }
             });
             ensureWatch();
+            return true;
         }
 
         async function logout() {
@@ -1842,7 +1860,7 @@
             if (!wasLoggedIn && !/[?&](apiKey|state)=/.test(location.search + location.hash) && !pendingNow) {
                 window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: null } }));
                 // 팝업을 클릭 즉시 열 수 있도록 SDK를 미리 불러둠 (실패해도 앱 사용에는 영향 없음)
-                setTimeout(() => { loadFirebase().then(ensureWatch).catch(() => {}); }, 1500);
+                loadFirebase().then(ensureWatch).catch(() => {});
                 return;
             }
             try {
