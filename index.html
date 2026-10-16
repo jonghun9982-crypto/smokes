@@ -60,6 +60,13 @@
         .start-scr .gbtn { width: 100%; max-width: 300px; font-size: 17px; padding: 15px; border-radius: 16px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); color: #fff; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; -webkit-tap-highlight-color: transparent; }
         .start-scr .gbtn:active { background: rgba(255,255,255,0.2); }
         .start-scr .skip { background: none; border: 0; color: #a1a1aa; text-decoration: underline; font-size: 14px; padding: 8px; }
+        .login-pending { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 10000; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 16px; background: rgba(39,39,42,0.96); border: 1px solid #3f3f46; color: #e4e4e7; font-size: 13px; }
+        .login-pending .lp-txt { flex: 1 1 100%; }
+        .login-pending button { padding: 8px 12px; border-radius: 12px; background: #3f3f46; color: #fff; font-size: 13px; font-weight: 600; }
+        .login-pending .lp-skip { background: none; text-decoration: underline; color: #a1a1aa; font-weight: 500; }
+        html.light .login-pending { background: rgba(255,255,255,0.97); border-color: #ded5c7; color: #1c1917; }
+        html.light .login-pending button { background: #ece5d9; color: #1c1917; }
+        html.light .login-pending .lp-skip { background: none; color: #57534e; }
         .tab-off { display: none !important; }
         body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
         .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: space-around; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: rgba(24,24,27,0.92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border-top: 1px solid #27272a; }
@@ -1631,7 +1638,9 @@
         };
         // iPhone Safari에서 redirect 로그인이 막히면: Netlify _redirects 프록시 + 이 값을 true 로 (보고서 참고)
         const USE_SAME_ORIGIN_AUTH = true;
-        if (USE_SAME_ORIGIN_AUTH && !/^(localhost|127\.)/.test(location.hostname)) firebaseConfig.authDomain = location.host;
+        // AUTH_HOST_RULE_V2: Netlify(/__/auth 프록시 있음)에서만 같은 출처 사용. github.io 등 그 외 호스트는 firebaseapp.com 유지
+        const HAS_AUTH_PROXY = /\.netlify\.app$/i.test(location.hostname);
+        if (USE_SAME_ORIGIN_AUTH && HAS_AUTH_PROXY) firebaseConfig.authDomain = location.host;
 
         const CHUNK_LIMIT = 800 * 1024, CHUNK_SIZE = 700 * 1024;
         const LAST_SYNC_KEY = 'smokingLastSyncAt';
@@ -1662,8 +1671,10 @@
                 import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-firestore.js')
             ]);
             const app = appM.initializeApp(firebaseConfig);
-            const auth = authM.getAuth(app);
-            await authM.setPersistence(auth, authM.browserLocalPersistence).catch(() => {});
+            const auth = authM.initializeAuth(app, {
+                persistence: [authM.indexedDBLocalPersistence, authM.browserLocalPersistence],
+                popupRedirectResolver: authM.browserPopupRedirectResolver
+            });
             fb = { authM, fsM, auth, db: fsM.getFirestore(app) };
             return fb;
         }
@@ -1749,25 +1760,69 @@
 
         function scheduleSync() { if (!user) return; clearTimeout(timer); timer = setTimeout(() => syncNow('auto'), 2500); }
 
-        async function login() {
-            try {
+        // ===== 로그인: 팝업 우선 (클릭 핸들러에서 await 없이 바로 호출) =====
+        const PENDING_KEY = 'smokingSyncRedirect', PENDING_MS = 8000;
+        let pendingTimer = null;
+        const safariMsg = () => L('홈 화면 앱에서는 구글 로그인이 막혀 있어요. Safari 탭에서 이 주소를 열어 로그인해 주세요. 로그인 후에는 홈 화면 앱에서도 동기화돼요.', 'Google login is blocked in the home-screen app. Please open this address in a Safari tab and log in there; sync will then work in the home-screen app too.');
+        function clearPending() {
+            try { sessionStorage.removeItem(PENDING_KEY); } catch (e) {}
+            clearTimeout(pendingTimer);
+            const b = $('login-pending'); if (b) b.remove();
+        }
+        function showPending() {
+            clearTimeout(pendingTimer);
+            let b = $('login-pending');
+            if (!b) {
+                b = document.createElement('div'); b.id = 'login-pending'; b.className = 'login-pending'; b.setAttribute('role', 'status');
+                b.innerHTML = `<span class="lp-txt"></span><button type="button" class="lp-retry"></button><button type="button" class="lp-skip"></button>`;
+                b.querySelector('.lp-retry').onclick = () => { clearPending(); login(); };
+                b.querySelector('.lp-skip').onclick = () => {
+                    clearPending();
+                    try { localStorage.setItem('smokingStartSkipped', '1'); } catch (e) {}
+                    const st = $('startScr'); if (st) st.hidden = true;
+                };
+                document.body.appendChild(b);
+            }
+            b.querySelector('.lp-txt').textContent = L('구글 로그인 확인 중…', 'Checking Google login…');
+            b.querySelector('.lp-retry').textContent = L('다시 시도', 'Retry');
+            b.querySelector('.lp-skip').textContent = L('로그인 없이 사용', 'Use without login');
+            pendingTimer = setTimeout(clearPending, PENDING_MS);   // 8초 후 자동 해제
+        }
+        function markPending() { try { sessionStorage.setItem(PENDING_KEY, String(Date.now())); } catch (e) {} showPending(); }
+
+        function onUser(u) {
+            user = u; renderAccount(); window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: u || null } }));
+            if (u) { localStorage.setItem('smokingSyncEnabled', '1'); clearPending(); syncNow('login'); }
+        }
+        function ensureWatch() {
+            if (window.__syncWatching || !fb) return;
+            window.__syncWatching = true;
+            fb.authM.onAuthStateChanged(fb.auth, onUser);
+        }
+
+        function login() {
+            if (!fb) {   // 아직 SDK가 안 불러와졌으면: 불러온 뒤 시도 (팝업이 막히면 한 번 더 누르면 바로 열림)
                 setStatus(L('로그인 준비 중…', 'Preparing login…'));
-                const { authM, auth } = await loadFirebase();
-                const provider = new authM.GoogleAuthProvider();
-                provider.setCustomParameters({ prompt: 'select_account' });
-                if (isStandalone() || isIOS()) {
+                loadFirebase().then(() => { ensureWatch(); login(); }).catch(e => setStatus(errMsg(e), 'error'));
+                return;
+            }
+            const { authM, auth } = fb;
+            const provider = new authM.GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            authM.signInWithPopup(auth, provider).then(() => { ensureWatch(); }).catch(e => {
+                const c = (e && e.code) || '';
+                if (c.includes('operation-not-supported-in-environment')) {
+                    markPending();
                     setStatus(L('구글 로그인 페이지로 이동할게요…', 'Going to the Google login page…'));
-                    await authM.signInWithRedirect(auth, provider);
-                    return;
-                }
-                try { await authM.signInWithPopup(auth, provider); }
-                catch (e) {
-                    if ((e.code || '').includes('popup-blocked') || (e.code || '').includes('operation-not-supported')) {
-                        setStatus(L('팝업이 막혀서 로그인 페이지로 이동할게요…', 'Popup blocked, going to the login page…'));
-                        await authM.signInWithRedirect(auth, provider);
-                    } else throw e;
-                }
-            } catch (e) { console.error(e); setStatus(errMsg(e), 'error'); }
+                    authM.signInWithRedirect(auth, provider).catch(err => {
+                        console.error(err); clearPending();
+                        setStatus(isStandalone() ? safariMsg() : errMsg(err), 'error');
+                    });
+                } else if (c.includes('popup-blocked')) {
+                    setStatus(L('팝업이 막혔어요. 로그인 버튼을 한 번 더 눌러 주세요.', 'The popup was blocked. Please tap the login button again.'), 'error');
+                } else { console.error(e); setStatus(isStandalone() && c.includes('internal') ? safariMsg() : errMsg(e), 'error'); }
+            });
+            ensureWatch();
         }
 
         async function logout() {
@@ -1779,37 +1834,27 @@
         window.__renderAccount = renderAccount;
         window.CloudSync = { login, logout, syncNow: () => syncNow('manual'), notifyChange: scheduleSync };
 
-        // 로그인한 적 있는 기기에서만 Firebase를 미리 불러옴 (오프라인/비로그인 사용에 영향 없음)
         async function boot() {
             renderAccount();
             const wasLoggedIn = localStorage.getItem('smokingSyncEnabled') === '1';
-            if (!wasLoggedIn && !/[?&](apiKey|state)=/.test(location.search + location.hash) && !sessionStorage.getItem('smokingSyncRedirect')) { window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: null } })); return; }
+            const pendingNow = !!sessionStorage.getItem(PENDING_KEY);
+            if (pendingNow) showPending();
+            if (!wasLoggedIn && !/[?&](apiKey|state)=/.test(location.search + location.hash) && !pendingNow) {
+                window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: null } }));
+                // 팝업을 클릭 즉시 열 수 있도록 SDK를 미리 불러둠 (실패해도 앱 사용에는 영향 없음)
+                setTimeout(() => { loadFirebase().then(ensureWatch).catch(() => {}); }, 1500);
+                return;
+            }
             try {
                 const { authM, auth } = await loadFirebase();
+                authM.getRedirectResult(auth).catch(e => { console.error(e); clearPending(); setStatus(isStandalone() ? safariMsg() : errMsg(e), 'error'); });
                 window.__syncWatching = true;
-                authM.getRedirectResult(auth).catch(e => { console.error(e); setStatus(errMsg(e), 'error'); });
                 authM.onAuthStateChanged(auth, u => {
-                    user = u; renderAccount(); window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: u || null } }));
-                    if (u) { localStorage.setItem('smokingSyncEnabled', '1'); sessionStorage.removeItem('smokingSyncRedirect'); syncNow('login'); }
-                    else localStorage.removeItem('smokingSyncEnabled');
+                    onUser(u);
+                    if (!u) localStorage.removeItem('smokingSyncEnabled');
                 });
             } catch (e) { if (wasLoggedIn) setStatus(L('오프라인이라 동기화를 잠시 쉬어요. 기록은 정상 저장돼요.', 'Offline, so sync is paused. Records are still saved.')); }
         }
-        // login() 이후 상태 감시 시작
-        const origLogin = login;
-        window.CloudSync.login = async () => {
-            sessionStorage.setItem('smokingSyncRedirect', '1');
-            const { authM, auth } = await loadFirebase().catch(e => { setStatus(errMsg(e), 'error'); return {}; });
-            if (!auth) return;
-            if (!window.__syncWatching) {
-                window.__syncWatching = true;
-                authM.onAuthStateChanged(auth, u => {
-                    user = u; renderAccount(); window.dispatchEvent(new CustomEvent('sync-auth', { detail: { user: u || null } }));
-                    if (u) { localStorage.setItem('smokingSyncEnabled', '1'); sessionStorage.removeItem('smokingSyncRedirect'); syncNow('login'); }
-                });
-            }
-            return origLogin();
-        };
         window.addEventListener('online', () => { if (user) scheduleSync(); });
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
     </script>
