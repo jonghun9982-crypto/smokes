@@ -246,12 +246,30 @@
 
         <!-- Today's Count -->
         <div data-tab="rec" class="px-6 mb-6">
-            <div class="bg-zinc-800 rounded-3xl p-5 flex justify-between items-center">
-                <div>
-                    <p class="text-sm text-zinc-400" data-i18n="today">오늘 흡연</p>
-                    <p id="today-count" class="text-6xl font-bold tabular-nums tracking-tighter">0</p>
+            <div class="bg-zinc-800 rounded-3xl p-5">
+                <div class="flex justify-between items-center gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm text-zinc-400" data-i18n="today">오늘 흡연</p>
+                        <p id="today-count" class="text-6xl font-bold tabular-nums tracking-tighter">0</p>
+                    </div>
+                    <!-- PACK_PRICE_V10: 1갑 가격 (오늘 흡연 카드 오른쪽, 탭하면 아래에 수정 폼) -->
+                    <div id="pack-price-row" class="shrink-0">
+                        <button type="button" id="pack-price-edit" onclick="openPackPriceEdit()" class="text-right -mr-2 px-2 py-1.5 rounded-xl min-h-[44px] leading-tight">
+                            <span class="block text-xs text-zinc-400" data-i18n="packLbl">1갑 가격</span>
+                            <span id="pack-price-val" class="block text-base font-semibold tabular-nums mt-0.5">4,500원</span>
+                            <span class="block text-[11px] text-zinc-500 tabular-nums mt-0.5 whitespace-nowrap"><span id="pack-price-sub">개비당 225원</span> · <span data-i18n="packEdit">변경 ›</span></span>
+                        </button>
+                    </div>
                 </div>
-                <i class="fa-solid fa-calendar-day text-6xl text-zinc-700"></i>
+                <div id="pack-price-form" class="hidden mt-4 pt-4 border-t border-zinc-700">
+                    <label for="pack-price-input" class="text-xs text-zinc-400 block mb-1" data-i18n="packInLbl">1갑 가격 (20개비, 원)</label>
+                    <div class="flex items-center gap-2">
+                        <input id="pack-price-input" type="text" inputmode="numeric" autocomplete="off" maxlength="6" class="min-w-0 flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-2 text-center text-base tabular-nums focus:outline-none focus:border-emerald-500">
+                        <button type="button" onclick="savePackPrice()" class="shrink-0 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold" data-i18n="save">저장</button>
+                        <button type="button" onclick="closePackPriceEdit()" class="shrink-0 px-3 py-2 rounded-2xl bg-zinc-700 hover:bg-zinc-600 text-sm" data-i18n="cancel">취소</button>
+                    </div>
+                    <p id="pack-price-msg" class="text-xs text-zinc-500 mt-2" data-i18n="packHelp">1,000~50,000원. 지출·절약 금액 계산에 쓰여요.</p>
+                </div>
             </div>
                 <div class="report-wrap px-1">
                     <button type="button" class="report-btn" onclick="toggleReport('today', this)" aria-expanded="false" aria-controls="report-today"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
@@ -375,25 +393,6 @@
                     <button type="button" class="report-btn" onclick="toggleReport('goal', this)" aria-expanded="false" aria-controls="report-goal"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-goal" class="report-box hidden"></div>
                 </div>
-            </div>
-        </div>
-
-        <!-- PACK_PRICE_V9: 1갑 가격 (작은 한 줄, 탭하면 수정) -->
-        <div data-tab="rec" class="px-6 mb-6">
-            <div id="pack-price-row" class="bg-zinc-800 rounded-2xl px-4 min-h-[48px] flex items-center justify-between gap-2">
-                <div class="text-sm min-w-0"><span class="text-zinc-400" data-i18n="packLbl">1갑 가격</span>
-                    <b id="pack-price-val" class="tabular-nums ml-1">4,500원</b>
-                    <span id="pack-price-sub" class="text-xs text-zinc-500 ml-1 tabular-nums">20개비 · 개비당 225원</span></div>
-                <button type="button" id="pack-price-edit" onclick="openPackPriceEdit()" class="shrink-0 text-xs text-zinc-400 px-2 py-2" data-i18n="packEdit">변경 ›</button>
-            </div>
-            <div id="pack-price-form" class="hidden bg-zinc-800 rounded-2xl px-4 py-3">
-                <label for="pack-price-input" class="text-xs text-zinc-400 block mb-1" data-i18n="packInLbl">1갑 가격 (20개비, 원)</label>
-                <div class="flex items-center gap-2">
-                    <input id="pack-price-input" type="text" inputmode="numeric" autocomplete="off" maxlength="6" class="min-w-0 flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-2 text-center text-base tabular-nums focus:outline-none focus:border-emerald-500">
-                    <button type="button" onclick="savePackPrice()" class="shrink-0 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold" data-i18n="save">저장</button>
-                    <button type="button" onclick="closePackPriceEdit()" class="shrink-0 px-3 py-2 rounded-2xl bg-zinc-700 hover:bg-zinc-600 text-sm" data-i18n="cancel">취소</button>
-                </div>
-                <p id="pack-price-msg" class="text-xs text-zinc-500 mt-2" data-i18n="packHelp">1,000~50,000원. 지출·절약 금액 계산에 쓰여요.</p>
             </div>
         </div>
 
@@ -1418,7 +1417,7 @@
         function renderPackPriceRow() {
             const v = document.getElementById('pack-price-val'), sub = document.getElementById('pack-price-sub');
             if (v) v.textContent = wonText(packPrice());
-            if (sub) sub.textContent = L(`${CIGARETTES_PER_PACK}개비 · 개비당 ${cigPriceNum()}원`, `${CIGARETTES_PER_PACK} cigs · ₩${cigPriceNum()} each`);
+            if (sub) sub.textContent = L(`개비당 ${cigPriceNum()}원`, `₩${cigPriceNum()} each`);
         }
         function fmtPriceInput(el) {
             const digits = String(el.value).replace(/[^0-9]/g, '').replace(/^0+/, '').slice(0, 5);
