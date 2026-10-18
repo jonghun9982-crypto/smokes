@@ -1207,16 +1207,17 @@
                 html += L(`<p class="text-sm text-zinc-400">아직 목표가 없어요.${sug != null ? ` 최근 평균을 보면 <b class="text-white">하루 ${sug}개비 이하</b>를 추천해요.` : ''}</p>`, `<p class="text-sm text-zinc-400">No goal yet.${sug != null ? ` Based on your recent average, we suggest <b class="text-white">${sug} or fewer per day</b>.` : ''}</p>`);
                 if (sug != null) html += `<button type="button" onclick="applySuggestedGoal()" class="mt-2 px-3 py-2 rounded-xl bg-emerald-600 text-sm font-semibold">${L('추천 목표 사용하기', 'Use suggested goal')}</button>`;
             } else {
-                // DESIGN_V7D: 1차(히어로) = 오늘 진행 상황. 카드에서 가장 큰 숫자는 이것 하나
+                // DESIGN_V7D2: 1차(히어로) = 목표 시작 후 누적 절약 → 누적 그래프 → 오늘 진행(보조)
+                html += goalHeroHtml(st, todayStr);
                 const over = st.todayCount > st.goal;
                 const pct = st.goal > 0 ? Math.min(100, st.todayCount / st.goal * 100) : (st.todayCount > 0 ? 100 : 0);
                 const color = over ? '#f59e0b' : '#22c55e';   // 초과는 빨강 대신 중립적인 주황
                 const remain = st.goal - st.todayCount;
-                html += `<div id="goal-today">
-                    <div class="flex justify-between items-center"><span class="text-sm text-zinc-400">${L('오늘', 'Today')}</span>
+                html += `<div id="goal-today" class="${st.startDate ? 'mt-5' : ''}">
+                    <div class="flex justify-between items-baseline gap-2">
+                        <div class="flex items-baseline gap-1.5"><span class="text-sm text-zinc-400 mr-1">${L('오늘', 'Today')}</span><span class="text-2xl font-bold tabular-nums">${st.todayCount}</span><span class="text-sm font-medium text-zinc-400">${L(`/ ${st.goal}개비`, `/ ${st.goal}`)}</span></div>
                         <span class="text-sm font-semibold ${over ? 'text-amber-300/90' : 'text-emerald-400'}">${over ? L(`목표보다 ${-remain}개비 많아요`, `${-remain} above goal`) : L(`${remain}개비 남음`, `${remain} left`)}</span></div>
-                    <div class="flex items-baseline gap-1.5 mt-1 mb-3"><span class="text-5xl font-bold tabular-nums tracking-tight">${st.todayCount}</span><span class="text-lg font-medium text-zinc-400">${L(`/ ${st.goal}개비`, `/ ${st.goal}`)}</span></div>
-                    <div class="w-full h-3 rounded-full bg-zinc-900 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="${st.goal}" aria-valuenow="${st.todayCount}">
+                    <div class="w-full h-2 mt-2 rounded-full bg-zinc-900 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="${st.goal}" aria-valuenow="${st.todayCount}">
                         <div style="width:${pct}%;background:${color};height:100%;transition:width .3s"></div></div>
                 </div>`;
                 html += goalActualHtml(st, todayStr);
@@ -1245,37 +1246,91 @@
         // 숫자 + 작고 흐린 단위 (한국어), 영어는 기존 표기
         const G_UNIT = 'text-[0.6em] font-medium text-zinc-400 ml-0.5';
         function gNum(n, unitKo, unitEn) { return `${n}<span class="${G_UNIT}">${L(unitKo, unitEn || '')}</span>`; }
-        function gWon(v, sign) { const s = sign && v > 0 ? '+' : ''; return window.__lang === 'en' ? s + wonText(v) : `${s}${v < 0 ? '-' : ''}${Math.abs(v).toLocaleString()}<span class="${G_UNIT}">원</span>`; }
-        function goalActualHtml(st, todayStr) {
+        // 표시 전용: 시작일~어제 일별 누적 절약(원). 마지막 값은 st.sinceWon과 같음 (같은 0.1개비 반올림)
+        function goalCumPoints(st, todayStr) {
+            const days = st.series.filter(d => d.date >= st.startDate && d.date < todayStr);
+            let c = 0;
+            return days.map(d => { c += st.baseline - d.count; return { date: d.date, won: Math.round(Math.round(c * 10) * PRICE_PER_CIGARETTE / 10) }; });
+        }
+        function goalSparkHtml(st, todayStr) {
+            const pts = goalCumPoints(st, todayStr);
+            const W = 300, H = 72, P = 6;
+            if (!pts.length) {
+                return `<div class="mt-3" id="goal-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full h-[72px]" aria-hidden="true"><line x1="0" x2="${W}" y1="${H / 2}" y2="${H / 2}" stroke="currentColor" class="text-zinc-500" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/></svg>
+                    <div class="text-xs text-zinc-500 text-center -mt-1">${L('하루가 끝나면 그래프가 그려져요', 'The chart starts after the first full day')}</div></div>`;
+            }
+            const all = [{ date: gdShift(st.startDate, -1), won: 0 }].concat(pts);   // 0원에서 출발
+            const vals = all.map(p => p.won), max = Math.max(0, ...vals), min = Math.min(0, ...vals), span = (max - min) || 1;
+            const x = i => (all.length === 1 ? W / 2 : i * W / (all.length - 1));
+            const y = v => P + (max - v) / span * (H - 2 * P);
+            let segs = '';
+            for (let i = 1; i < all.length; i++) {
+                const neg = all[i].won < 0;   // 누적이 0 아래로 내려간 날은 주황
+                segs += `<line x1="${x(i - 1).toFixed(1)}" y1="${y(all[i - 1].won).toFixed(1)}" x2="${x(i).toFixed(1)}" y2="${y(all[i].won).toFixed(1)}" stroke="currentColor" class="${neg ? 'text-amber-300/90' : 'text-emerald-400'}" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+            }
+            const last = all[all.length - 1];
+            return `<div class="mt-3" id="goal-chart">
+                <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full h-[72px] opacity-80" role="img" aria-label="${L(`누적 절약 그래프, 마지막 ${wonText(last.won)}`, `Cumulative savings chart, latest ${wonText(last.won)}`)}">
+                    <line x1="0" x2="${W}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="currentColor" class="text-zinc-500" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
+                    ${segs}
+                </svg>
+                <div class="flex justify-between text-[11px] text-zinc-500 tabular-nums mt-1 leading-tight">
+                    <div><div>${gdMD(st.startDate)} ${L('시작', 'start')}</div><div class="text-zinc-500" data-chart="start">${window.__lang === 'en' ? wonText(0) : '0원'}</div></div>
+                    <div class="text-right"><div>${L('어제', 'yesterday')}</div><div class="font-semibold ${last.won > 0 ? 'text-emerald-400' : last.won < 0 ? 'text-amber-300/90' : 'text-zinc-500'}" data-chart="end">${window.__lang === 'en' ? wonText(Math.abs(last.won)) : Math.abs(last.won).toLocaleString() + '원'}</div></div>
+                </div>
+            </div>`;
+        }
+        function goalHeroHtml(st, todayStr) {
             if (!st.startDate) return '';
-            // 2차: '목표 시작 후' 한 묶음. D+ 배지 + 같은 크기 3칸(아낀 금액 / 안 피운 개비 / 연속 달성) + 기간 한 줄
-            let h = `<div class="mt-6 bg-zinc-900/60 rounded-2xl p-4" id="goal-actual">
-                <div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold text-zinc-300">${L('목표 시작 후', 'Since goal start')}</span>
-                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-700 text-zinc-300 tabular-nums" id="goal-start">D+${st.dPlus} · ${L(`${gdMD(st.startDate)} 시작`, `from ${gdMD(st.startDate)}`)}</span></div>`;
+            // 맨 위: 작은 배지 2개 + 누적 절약 문장(카드에서 가장 큰 글자)
+            const achieved = st.series.filter(d => d.date >= st.startDate && d.date < todayStr && d.count <= st.goal).length;
+            const badge = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-700 text-zinc-300 tabular-nums';
+            let h = `<div id="goal-hero"><div class="flex items-center gap-2">
+                <span class="${badge}" id="goal-start">D+${st.dPlus}</span>
+                ${st.sinceDays > 0 ? `<span class="${badge}" id="goal-achieved">${L(`${st.sinceDays}일 중 ${achieved}일 달성`, `${achieved} of ${st.sinceDays} days met`)}</span>` : ''}</div>`;
             if (st.sinceDays == null) return h + '</div>';
-            const has = st.sinceDays > 0, neg = has && st.sinceWon < 0;
+            const has = st.sinceDays > 0, neg = has && st.sinceWon < 0, zero = !has || st.sinceWon === 0;
+            const amt = v => window.__lang === 'en' ? wonText(Math.abs(v)) : `${Math.abs(v).toLocaleString()}<span class="text-xl font-bold ml-0.5">원</span>`;
+            const word = t => `<span class="text-lg font-semibold text-zinc-400">${t}</span>`;
+            let money;
+            if (zero) money = `<div class="text-2xl font-bold text-zinc-400 py-2">${L('아직 아낀 금액이 없어요', 'Nothing saved yet')}</div>`;
+            else if (neg) money = `<div class="flex flex-wrap items-baseline gap-x-2">${word(L('기준보다', ''))}<span class="text-4xl font-bold tabular-nums tracking-tight text-amber-300/90">${amt(st.sinceWon)}</span>${word(L('더 썼어요', 'more than baseline'))}</div>`;
+            else money = `<div class="flex flex-wrap items-baseline gap-x-2">${word(L('지금까지', 'Saved'))}<span class="text-4xl font-bold tabular-nums tracking-tight text-emerald-400">${amt(st.sinceWon)}</span>${word(L('아꼈어요', 'so far'))}</div>`;
             const yest = gdShift(todayStr, -1);
+            const sub = has ? L(`${st.sinceDays > 1 ? `${gdMD(st.startDate)}~${gdMD(yest)}` : gdMD(st.startDate)} · ${st.sinceDays}일`, `${st.sinceDays > 1 ? `${gdMD(st.startDate)}–${gdMD(yest)}` : gdMD(st.startDate)} · ${st.sinceDays} days`) : L(`${gdMD(st.startDate)} 시작 · 내일부터 집계돼요`, `from ${gdMD(st.startDate)} · counted from tomorrow`);
+            h += `<div class="mt-3" data-ga="since">${money}<div class="text-xs text-zinc-500 mt-1 tabular-nums">${sub}</div></div>`;
+            h += goalSparkHtml(st, todayStr);
+            return h + '</div>';
+        }
+        function goalActualHtml(st, todayStr) {
+            if (!st.startDate || st.sinceDays == null) return '';
+            // 2차 묶음: 안 피운 개비 / 연속 달성(최고 기록) + 기간이 다른 금액 2줄
+            const has = st.sinceDays > 0, neg = has && st.sinceWon < 0;
             const tile = (label, value, sub, attr) => `<div class="min-w-0"><div class="text-xs text-zinc-400">${label}</div><div class="text-xl font-bold tabular-nums tracking-tight mt-0.5 whitespace-nowrap" ${attr || ''}>${value}</div><div class="text-xs text-zinc-500 mt-0.5">${sub}</div></div>`;
-            const moneyVal = has ? `<span class="${neg ? 'text-zinc-300' : 'text-emerald-400'}">${gWon(st.sinceWon, true)}</span>` : `<span class="text-zinc-500">–</span>`;
-            const moneySub = has ? (st.sinceDays > 1 ? `${gdMD(st.startDate)}~${gdMD(yest)}` : gdMD(st.startDate)) : L('내일부터 집계', 'from tomorrow');
             const cigVal = has ? gNum(rptFmt(neg ? -st.sinceCigs : st.sinceCigs), '개비', '') : `<span class="text-zinc-500">–</span>`;
             const strVal = gNum(st.currentStreak, '일', st.currentStreak === 1 ? ' day' : ' days');
-            h += `<div class="grid grid-cols-3 gap-3 mt-4">
-                ${tile(L('아낀 금액', 'Saved'), moneyVal, moneySub, 'data-ga="since"')}
-                ${tile(neg ? L('더 피운 개비', 'Extra cigs') : L('안 피운 개비', 'Cigs avoided'), cigVal, has ? L(`${st.sinceDays}일 동안`, `${st.sinceDays} days`) : '&nbsp;')}
+            let h = `<div class="mt-5 bg-zinc-900/60 rounded-2xl p-4" id="goal-actual"><div class="grid grid-cols-2 gap-3">
+                ${tile(neg ? L('더 피운 개비', 'Extra cigs') : L('안 피운 개비', 'Cigs avoided'), cigVal, has ? L(`${st.sinceDays}일 동안`, `${st.sinceDays} days`) : L('내일부터 집계', 'from tomorrow'))}
                 ${tile(L('연속 달성', 'Streak'), strVal, L(`최고 ${st.bestStreak}일`, `best ${st.bestStreak}`), 'id="goal-streak"')}
             </div>`;
             // 기간이 다른 두 금액을 한 줄씩, 기간을 날짜로 명시 (작고 흐리게)
             const notes = [];
+            // 금액 문장 규칙(부호 없음): 양수 'N원 아꼈어요'(초록) / 음수 '기준보다 N원 더 썼어요'(주황) / 0 회색
+            const sent = (v, posKo, posEn, negKo, negEn, zeroKo, zeroEn) => {
+                const n = `<b class="tabular-nums">${window.__lang === 'en' ? wonText(Math.abs(v)) : Math.abs(v).toLocaleString() + '원'}</b>`;
+                if (v > 0) return `<span class="text-emerald-400">${L(posKo(n), posEn(n))}</span>`;
+                if (v < 0) return `<span class="text-amber-300/90">${L(negKo(n), negEn(n))}</span>`;
+                return `<span class="text-zinc-500">${L(zeroKo, zeroEn)}</span>`;
+            };
             if (st.streakIncludesToday) {
                 const from = gdShift(todayStr, -(st.currentStreak - 1));
                 const range = st.currentStreak > 1 ? L(`${gdMD(from)}~오늘`, `${gdMD(from)}–today`) : L('오늘', 'today');
-                notes.push(`<span data-ga="streak">${L(`연속 달성 기간(${range}) 절약 <b class="text-zinc-300 tabular-nums">${signedWon(st.streakWon)}</b>`, `Saved during streak (${range}) <b class="text-zinc-300 tabular-nums">${signedWon(st.streakWon)}</b>`)}</span>`);
+                notes.push(`<span data-ga="streak">${L(`연속 달성 기간(${range})`, `Streak (${range})`)} ${sent(st.streakWon, n => `${n} 아꼈어요`, n => `saved ${n}`, n => `기준보다 ${n} 더 썼어요`, n => `${n} more than baseline`, '아직 아낀 금액이 없어요', 'nothing saved yet')}</span>`);
             } else {
                 notes.push(`<span data-ga="streak">${L('새 연속 기록은 내일부터 다시 시작돼요', 'A new streak starts tomorrow')}</span>`);
             }
-            if (st.sinceTodayWon != null) notes.push(`<span id="goal-today-note">${L(`오늘 진행 중 <b class="text-zinc-300 tabular-nums">${signedWon(st.sinceTodayWon)}</b> · 자정에 합산`, `Today so far <b class="text-zinc-300 tabular-nums">${signedWon(st.sinceTodayWon)}</b> · added at midnight`)}</span>`);
-            h += `<div class="border-t border-zinc-700 mt-4 pt-3 space-y-1 text-xs text-zinc-400">${notes.map(n => `<div>${n}</div>`).join('')}</div>`;
+            if (st.sinceTodayWon != null) notes.push(`<span id="goal-today-note">${sent(st.sinceTodayWon, n => `오늘은 지금까지 ${n} 아끼는 중`, n => `Saving ${n} so far today`, n => `오늘은 지금까지 기준보다 ${n} 더 썼어요`, n => `${n} over baseline so far today`, '오늘은 아직 아낀 금액이 없어요', 'Nothing saved yet today')} · ${L('자정에 합산', 'added at midnight')}</span>`);
+            h += `<div class="border-t border-zinc-700 mt-4 pt-3 space-y-1 text-xs text-zinc-400" style="word-break:keep-all">${notes.map(n => `<div>${n}</div>`).join('')}</div>`;
             return h + '</div>';
         }
         function baselineInfoHtml(st) {
