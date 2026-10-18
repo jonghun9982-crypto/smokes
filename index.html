@@ -1483,11 +1483,12 @@
         function pad2(n) { return String(n).padStart(2, '0'); }
         function loadUndo() { try { const u = JSON.parse(localStorage.getItem(UNDO_KEY) || 'null'); return u && Array.isArray(u.records) ? u : null; } catch (e) { return null; } }
         // 백업: CSV 다운로드 + localStorage 스냅샷. 스냅샷 저장에 실패하면 계속할지 물어봄
-        function autoBackup(action) {
+        function autoBackup(action, opts) {
+            opts = opts || {};
             const now = new Date();
             let csvOk = true;
-            if (records.length) csvOk = downloadCSV(buildCSV(records), `흡연기록_자동백업_${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}_${pad2(now.getHours())}${pad2(now.getMinutes())}.csv`);
-            const snap = { savedAt: now.toISOString(), action, records: JSON.parse(JSON.stringify(records)), goalSettings: { ...goalSettings }, tombstones: loadTombstones() };
+            if (records.length && opts.csv !== false) csvOk = downloadCSV(buildCSV(records), `흡연기록_자동백업_${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}_${pad2(now.getHours())}${pad2(now.getMinutes())}.csv`);
+            const snap = { savedAt: now.toISOString(), action, records: JSON.parse(JSON.stringify(records)), goalSettings: { ...goalSettings }, tombstones: loadTombstones(), ...(opts.extra || {}) };
             try { localStorage.setItem(UNDO_KEY, JSON.stringify(snap)); }
             catch (e) {
                 return confirm(L('저장 공간이 부족해 되돌리기용 백업을 만들지 못했어요.' + (csvOk ? ' (CSV 백업 파일은 받았어요)' : '') + '\n그래도 계속할까요?', 'Not enough storage to save an undo backup.' + (csvOk ? ' (The CSV backup was downloaded.)' : '') + '\nContinue anyway?'));
@@ -1504,25 +1505,47 @@
         }
         function applyResurrect(tombs, res) { return (tombs || []).filter(k => !(Number(res[k]) > 0)); }
 
+        function undoActionLabel(action, cap) {
+            if (action === 'sample') return cap ? L('샘플 데이터', 'Sample data') : L('샘플 데이터', 'sample data');
+            if (action === 'import') return cap ? L('CSV 불러오기', 'Import CSV') : L('CSV 불러오기', 'import CSV');
+            if (action === 'deleteAll') return cap ? L('전체 삭제', 'Delete all') : L('전체 삭제', 'delete all');
+            return cap ? L('마지막 작업', 'Last action') : L('마지막 작업', 'last action');   // 알 수 없는/예전 스냅샷 (예: v4 'dedup')
+        }
+        function dupNote(k) { return k > 0 ? L(`\n중복 기록 ${k}개도 함께 정리돼요.`, `\n${k} duplicate records will also be removed.`) : ''; }
         function undoLastAction() {
             const u = loadUndo();
             if (!u) return;
-            const label = u.action === 'sample' ? L('샘플 데이터', 'sample data') : L('전체 삭제', 'delete all');
-            if (!confirm(L(`'${label}' 이전 상태로 되돌릴까요?\n기록 ${u.records.length}건과 목표 설정이 복원돼요. (지금 기록은 대체돼요)`, `Restore the state before '${label}'?\n${u.records.length} records and goal settings will be restored (current records will be replaced).`))) return;
-            records = u.records;
+            const label = undoActionLabel(u.action);
+            const addedIds = Array.isArray(u.addedIds) ? u.addedIds : null;
+            if (u.action === 'import' && addedIds) {
+                // 불러오기로 추가된 기록만 제거 (그 뒤에 남긴 +1 기록은 유지)
+                const added = new Set(addedIds.map(String));
+                const drop = records.filter(r => added.has(String(r.id)));
+                const k = findDuplicateRecords(records.filter(r => !added.has(String(r.id)))).remove.length;
+                if (!confirm(L(`'${label}'를 되돌릴까요?\n불러온 기록 ${drop.length}건을 지워요. (그 뒤에 남긴 기록은 유지돼요)`, `Undo '${label}'?\n${drop.length} imported records will be removed (records added afterwards are kept).`) + dupNote(k))) return;
+                addTombstones(drop);   // 다른 기기에서도 지워지도록 삭제 표시
+                records = records.filter(r => !added.has(String(r.id)));
+            } else {
+                const k = findDuplicateRecords(u.records).remove.length;
+                if (!confirm(L(`'${label}' 이전 상태로 되돌릴까요?\n기록 ${u.records.length}건과 목표 설정이 복원돼요. (지금 기록은 대체돼요)`, `Restore the state before '${label}'?\n${u.records.length} records and goal settings will be restored (current records will be replaced).`) + dupNote(k))) return;
+                records = u.records;
+            }
             // 이 작업으로 생긴 삭제 표시 제거 → 동기화 때 복원한 기록이 다시 지워지지 않게
             const keys = new Set(records.map(syncRecordKey));
             try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(loadTombstones().filter(k => !keys.has(k)))); } catch (e) {}
             const res = loadResurrect(), ts = Date.now();
             keys.forEach(k => { res[k] = ts; });
             saveResurrect(mergeResurrect(res, {}));
-            goalSettings = { dailyGoal: u.goalSettings ? u.goalSettings.dailyGoal ?? null : null, baseline: u.goalSettings ? u.goalSettings.baseline ?? null : null };
-            saveGoalSettings();
+            const dupCleaned = dedupeRecords();   // 복원 후 중복 자동 정리 (삭제 표시는 살림 표시 뒤에 붙여 동기화에서도 정리됨)
+            if (!(u.action === 'import' && addedIds)) {   // 불러오기는 목표 설정을 바꾸지 않으므로 그 뒤 바꾼 목표는 유지
+                goalSettings = { dailyGoal: u.goalSettings ? u.goalSettings.dailyGoal ?? null : null, baseline: u.goalSettings ? u.goalSettings.baseline ?? null : null };
+                saveGoalSettings();
+            }
             try { localStorage.removeItem(UNDO_KEY); } catch (e) {}
             saveData();   // 로그인 상태면 동기화 예약
             renderAll();
             hideUndoToast();
-            showToast(L(`되돌렸어요. 기록 ${records.length}건을 복원했어요.`, `Restored ${records.length} records.`));
+            showToast(L(`되돌렸어요. 기록 ${records.length}건을 복원했어요.`, `Restored ${records.length} records.`) + dupMsg(dupCleaned));
         }
         let undoToastTimer = null;
         function hideUndoToast() { const t = document.getElementById('undo-toast'); if (t) t.remove(); clearTimeout(undoToastTimer); }
@@ -1540,11 +1563,43 @@
             const u = loadUndo();
             btn.hidden = !u;
             if (u) {
-                const label = u.action === 'sample' ? L('샘플 데이터', 'Sample data') : L('전체 삭제', 'Delete all');
+                const label = undoActionLabel(u.action, true);
                 const when = new Date(u.savedAt).toLocaleString(LOC(), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 btn.querySelector('span').textContent = L(`마지막 작업 되돌리기 (${label} · ${when})`, `Undo last action (${label} · ${when})`);
             }
         }
+
+        // ===== IMPORT_DEDUP_V4: 중복 판별 키 = 현지 날짜 + 시간(초) + 개수 + 메모 (내보내기와 같은 현지 시간 해석) =====
+        function recordDedupKey(r) {
+            const d = new Date(r && r.datetime);
+            const when = isNaN(d) ? `?${r && r.datetime}` : `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+            const note = String((r && r.note) || '').replace(/"/g, '').trim();   // CSV 왕복 시 따옴표가 빠지는 것과 맞춤
+            return `${when}|${parseInt(r && r.count)}|${note}`;
+        }
+        // 같은 키의 기록 중 하나만 남기고 나머지 목록 반환 (가장 먼저 만든 = id가 작은 기록을 남김)
+        function findDuplicateRecords(recs) {
+            const groups = new Map();
+            recs.forEach(r => { const k = recordDedupKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+            const keep = [], remove = [];
+            groups.forEach(g => {
+                if (g.length === 1) { keep.push(g[0]); return; }
+                const sorted = [...g].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+                keep.push(sorted[0]); remove.push(...sorted.slice(1));
+            });
+            return { keep, remove };
+        }
+        // 같은 키(초 단위 시각·개수·메모)의 기록을 하나만 남기고 정리. 동기화 삭제 표시 추가. 정리한 개수 반환 (저장은 호출한 쪽에서)
+        function dedupeRecords() {
+            const { keep, remove } = findDuplicateRecords(records);
+            if (!remove.length) return 0;
+            // 남기는 기록과 동기화 키가 같은 경우(같은 id·시각 복제본)는 삭제 표시하지 않음 (남긴 기록까지 지워지지 않게)
+            const keepKeys = new Set(keep.map(syncRecordKey));
+            addTombstones(remove.filter(r => !keepKeys.has(syncRecordKey(r))));
+            const removeSet = new Set(remove);
+            records = records.filter(r => !removeSet.has(r));
+            return remove.length;
+        }
+        function dupMsg(k) { return k > 0 ? L(` 중복 ${k}개도 정리했어요.`, ` Also removed ${k} duplicates.`) : ''; }
 
         // ==================== 가장 강화된 CSV 불러오기 ====================
         function importCSV() {
@@ -1559,7 +1614,13 @@
                 reader.onload = function(event) {
                     const text = event.target.result;
                     const lines = text.trim().split(/\r?\n/);
-                    let importedCount = 0;
+                    let importedCount = 0, skippedCount = 0;
+                    // 기존 중복은 정리될 예정 → 남을 기록의 키 기준으로 판단. 같은 키는 하나만 (CSV 안의 반복 행도 건너뜀)
+                    const dupK = findDuplicateRecords(records).remove.length;
+                    const existing = new Set(records.map(recordDedupKey));
+                    const usedIds = new Set(records.map(r => String(r.id)));
+                    let nextId = Date.now();
+                    const toAdd = [];
 
                     lines.forEach((line, index) => {
                         if (index === 0) return;
@@ -1600,25 +1661,40 @@
                                 const s = timeMatch[3].padStart(2, '0');
                                 formattedTime = `${h}:${m}:${s}`;
                             } else if (timeStr.includes(':')) {
-                                formattedTime = timeStr;
+                                // "5:07" / "05:07:09" → "05:07:00" / "05:07:09"
+                                const tp = timeStr.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+                                formattedTime = tp ? `${tp[1].padStart(2,'0')}:${tp[2].padStart(2,'0')}:${(tp[3] || '0').padStart(2,'0')}` : timeStr;
                             }
                         }
 
                         const datetime = `${formattedDate}T${formattedTime}`;
                         if (isNaN(new Date(datetime))) return;
 
-                        records.push({
-                            id: Date.now() + index,
-                            datetime: datetime,
-                            count: count,
-                            note: note
-                        });
-                        importedCount++;
+                        const row = { datetime: datetime, count: count, note: note };
+                        const k = recordDedupKey(row);
+                        if (existing.has(k)) { skippedCount++; return; }
+                        existing.add(k);
+                        while (usedIds.has(String(nextId))) nextId++;
+                        usedIds.add(String(nextId));
+                        toAdd.push({ id: nextId++, ...row });
                     });
 
-                    saveData();
-                    renderAll();
-                    alert(L(`${importedCount}개의 기록을 불러왔습니다.`, `Imported ${importedCount} records.`));
+                    importedCount = toAdd.length;
+                    let backedUp = false;
+                    let cleaned = 0;
+                    if (importedCount > 0 || dupK > 0) {
+                        // 바뀌기 전에 되돌리기용 스냅샷 (불러오기는 CSV 자동 다운로드 생략) → 기존 중복 정리 → 새 기록 추가
+                        if (!autoBackup('import', { csv: false, extra: { addedIds: toAdd.map(r => r.id) } })) return;
+                        backedUp = true;
+                        cleaned = dedupeRecords();
+                        records = records.concat(toAdd);
+                        saveData();
+                        renderAll();
+                    }
+                    const msg = L(`${importedCount}개 추가, ${skippedCount}개는 이미 있어 건너뜀`, `${importedCount} added, ${skippedCount} skipped (already exist)`)
+                        + (cleaned > 0 ? L(`, 기존 중복 ${cleaned}개 정리`, `, ${cleaned} existing duplicates removed`) : '');
+                    if (backedUp) showToast(msg, true);
+                    alert(msg);
                 };
                 reader.readAsText(file, 'UTF-8');
             };
