@@ -367,7 +367,7 @@
                             <input id="goal-start-input" type="date" class="mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-3 text-center text-base focus:outline-none focus:border-emerald-500" style="color-scheme: dark">
                         </label>
                     </div>
-                    <p class="text-xs text-zinc-500 mt-2" data-i18n="goalHelp">목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균). 1갑 4,500원 기준.</p>
+                    <p class="text-xs text-zinc-500 mt-2"><span data-i18n="goalHelp">목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균).</span> <span id="goal-help-price">1갑 4,500원 기준.</span></p>
                     <div id="goal-calc-detail"></div>
                     <button type="button" onclick="saveGoalFromInputs()" class="mt-3 w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold" data-i18n="save">저장</button>
                 </details>
@@ -375,6 +375,25 @@
                     <button type="button" class="report-btn" onclick="toggleReport('goal', this)" aria-expanded="false" aria-controls="report-goal"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-goal" class="report-box hidden"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- PACK_PRICE_V9: 1갑 가격 (작은 한 줄, 탭하면 수정) -->
+        <div data-tab="rec" class="px-6 mb-6">
+            <div id="pack-price-row" class="bg-zinc-800 rounded-2xl px-4 min-h-[48px] flex items-center justify-between gap-2">
+                <div class="text-sm min-w-0"><span class="text-zinc-400" data-i18n="packLbl">1갑 가격</span>
+                    <b id="pack-price-val" class="tabular-nums ml-1">4,500원</b>
+                    <span id="pack-price-sub" class="text-xs text-zinc-500 ml-1 tabular-nums">20개비 · 개비당 225원</span></div>
+                <button type="button" id="pack-price-edit" onclick="openPackPriceEdit()" class="shrink-0 text-xs text-zinc-400 px-2 py-2" data-i18n="packEdit">변경 ›</button>
+            </div>
+            <div id="pack-price-form" class="hidden bg-zinc-800 rounded-2xl px-4 py-3">
+                <label for="pack-price-input" class="text-xs text-zinc-400 block mb-1" data-i18n="packInLbl">1갑 가격 (20개비, 원)</label>
+                <div class="flex items-center gap-2">
+                    <input id="pack-price-input" type="text" inputmode="numeric" autocomplete="off" maxlength="6" class="min-w-0 flex-1 bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-2 text-center text-base tabular-nums focus:outline-none focus:border-emerald-500">
+                    <button type="button" onclick="savePackPrice()" class="shrink-0 px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold" data-i18n="save">저장</button>
+                    <button type="button" onclick="closePackPriceEdit()" class="shrink-0 px-3 py-2 rounded-2xl bg-zinc-700 hover:bg-zinc-600 text-sm" data-i18n="cancel">취소</button>
+                </div>
+                <p id="pack-price-msg" class="text-xs text-zinc-500 mt-2" data-i18n="packHelp">1,000~50,000원. 지출·절약 금액 계산에 쓰여요.</p>
             </div>
         </div>
 
@@ -455,11 +474,18 @@
         let monthlyCostChartInstance = null;
         let monthlyCountChartInstance = null;
 
-        const PRICE_PER_PACK = 4500;
+        // PACK_PRICE_V9: 1갑 가격은 목표 설정(smokingGoalSettings.packPrice, 선택 필드)에 저장 → 동기화됨. 없으면 4,500원
+        const DEFAULT_PACK_PRICE = 4500;
+        const PACK_PRICE_MIN = 1000, PACK_PRICE_MAX = 50000;
         const CIGARETTES_PER_PACK = 20;
         const BAR_RADIUS = 0;          // 모든 막대 차트 공통 모서리 둥글기
         const BAR_SKIPPED = 'start';   // 바닥(시작) 쪽은 각지게, 위쪽만 둥글게
-        const PRICE_PER_CIGARETTE = PRICE_PER_PACK / CIGARETTES_PER_PACK;
+        function validPackPrice(v) { const n = Number(v); return (v !== null && v !== '' && Number.isInteger(n) && n >= PACK_PRICE_MIN && n <= PACK_PRICE_MAX) ? n : null; }
+        function packPrice() { return (goalSettings && validPackPrice(goalSettings.packPrice)) || DEFAULT_PACK_PRICE; }
+        function pricePerCig() { return packPrice() / CIGARETTES_PER_PACK; }
+        // 표시용 개비당 가격 (예: 225 / 237.5) — 언어별 단위 포함
+        function cigPriceNum() { return pricePerCig().toLocaleString('ko-KR', { maximumFractionDigits: 2 }); }
+        function cigPriceText() { return L(`${cigPriceNum()}원`, `₩${cigPriceNum()}`); }
 
         function loadData() {
             const saved = localStorage.getItem('smokingRecordsAdvanced');
@@ -675,10 +701,10 @@
 
             const sortedMonths = Object.keys(monthlyMap).sort().slice(-12);
             const labels = sortedMonths.map(m => L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1]));
-            const costs = sortedMonths.map(month => Math.round(monthlyMap[month] * PRICE_PER_CIGARETTE));
+            const costs = sortedMonths.map(month => Math.round(monthlyMap[month] * pricePerCig()));
 
             const currentMonth = new Date().toISOString().slice(0, 7);
-            const currentMonthCost = monthlyMap[currentMonth] ? Math.round(monthlyMap[currentMonth] * PRICE_PER_CIGARETTE) : 0;
+            const currentMonthCost = monthlyMap[currentMonth] ? Math.round(monthlyMap[currentMonth] * pricePerCig()) : 0;
 
             document.getElementById('monthly-cost-summary').innerHTML = `
                 <div class="text-sm text-zinc-400">${L('이번 달 예상 지출', 'Spending this month')}</div>
@@ -802,11 +828,11 @@
             else text = L(`최근과 비슷한 수준을 유지할 것으로 예상됩니다.`, `Expected to stay about the same as recently.`);
 
             const label = periodLabel(days);
-            const totalCost = Math.round(totalPred * PRICE_PER_CIGARETTE);
+            const totalCost = Math.round(totalPred * pricePerCig());
             const packs = (totalPred / CIGARETTES_PER_PACK).toFixed(1);
             text += `<div class="mt-3 grid grid-cols-2 gap-2 text-center">
                 <div class="bg-zinc-800 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`${label} 예상 흡연량`, `${label} expected total`)}</div><div class="text-lg font-bold text-white">${L(`${Math.round(totalPred).toLocaleString()}개비`, `${Math.round(totalPred).toLocaleString()} cigs`)}</div><div class="text-xs text-zinc-500">${L(`약 ${packs}갑 · 하루 ${avgFuture.toFixed(1)}개비`, `~${packs} packs · ${avgFuture.toFixed(1)}/day`)}</div></div>
-                <div class="bg-zinc-800 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${PRICE_PER_PACK.toLocaleString()}원 기준`, `Based on ₩${PRICE_PER_PACK.toLocaleString()}/pack`)}</div></div>
+                <div class="bg-zinc-800 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${packPrice().toLocaleString()}원 기준`, `Based on ₩${packPrice().toLocaleString()}/pack`)}</div></div>
             </div>`;
             if (days > 30) {
                 const recordedDays = dailyData.length;
@@ -882,7 +908,7 @@
                     ]
                 },
                 options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, plugins:{legend:{display:true},
-                    tooltip:{mode:'index', intersect:false, filter:(c)=>c.raw!=null, callbacks:{label:(c)=>L(`${c.dataset.label}: ${c.parsed.y}개비 (${Math.round(c.parsed.y*PRICE_PER_CIGARETTE).toLocaleString()}원)`, `${c.dataset.label}: ${c.parsed.y} cigs (${wonText(Math.round(c.parsed.y*PRICE_PER_CIGARETTE))})`)}}},
+                    tooltip:{mode:'index', intersect:false, filter:(c)=>c.raw!=null, callbacks:{label:(c)=>L(`${c.dataset.label}: ${c.parsed.y}개비 (${Math.round(c.parsed.y*pricePerCig()).toLocaleString()}원)`, `${c.dataset.label}: ${c.parsed.y} cigs (${wonText(Math.round(c.parsed.y*pricePerCig()))})`)}}},
                     scales:{ x:{stacked:true, ticks:{autoSkip:true, maxRotation:0}}, y:{stacked:true, beginAtZero:true} } }
             });
         }
@@ -1026,7 +1052,7 @@
             setRecords: (r) => { records = r; saveData(true); renderAll(); },
             getGoal: () => goalSettings,
             getGoalTs: () => Number(localStorage.getItem(SYNC_GOAL_TS_KEY) || 0),
-            setGoal: (g, ts) => { goalSettings = normalizeGoal(g, ts); localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings)); localStorage.setItem(SYNC_GOAL_TS_KEY, String(ts || 0)); renderGoalCard(); },
+            setGoal: (g, ts) => { const oldPrice = packPrice(); goalSettings = normalizeGoal(g, ts); localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings)); localStorage.setItem(SYNC_GOAL_TS_KEY, String(ts || 0)); if (packPrice() !== oldPrice) renderAll(); else renderGoalCard(); },
             getTombstones: loadTombstones,
             getResurrect: loadResurrect, setResurrect: saveResurrect, mergeResurrect, applyResurrect,
             setTombstones: (t) => { try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(t)); } catch (e) {} },
@@ -1051,6 +1077,9 @@
                 baseline: Number.isFinite(g.baseline) && g.baseline > 0 ? g.baseline : null,
                 startDate: validDateStr(g.startDate)
             };
+            // PACK_PRICE_V9: 선택 필드. 올바른 값일 때만 유지 (없거나 이상하면 빼서 기본 4,500원)
+            const pp = validPackPrice(g.packPrice);
+            if (pp != null) out.packPrice = pp;
             // 시작일 없는 예전 목표: 목표를 마지막으로 저장한 날(smokingGoalUpdatedAt), 없으면 오늘
             if (out.dailyGoal != null && !out.startDate) out.startDate = defaultGoalStart(ts);
             if (out.dailyGoal == null) out.startDate = null;
@@ -1128,7 +1157,7 @@
                 st.last30Achieved = last30.filter(d => d.count <= goal).length;
             }
             if (baseline != null) {
-                const saved = d => (baseline - d.count) * PRICE_PER_CIGARETTE;
+                const saved = d => (baseline - d.count) * pricePerCig();
                 const month = todayStr.slice(0,7);
                 st.savedToday = Math.round(saved(today));
                 st.savedMonth = Math.round(series.filter(d => d.date.slice(0,7) === month).reduce((a,d)=>a+saved(d),0));
@@ -1153,8 +1182,8 @@
                     const done = pastDays.filter(d => d.date >= start);
                     const cigs = done.reduce((a,d)=>a+(baseline - d.count),0);
                     st.sinceDays = done.length;
-                    // 개비는 0.1 단위로 반올림한 뒤 원 계산 (표시되는 개비 × 225원과 맞도록, 부동소수 오차 방지)
-                    const won10 = c10 => Math.round(c10 * PRICE_PER_CIGARETTE / 10);
+                    // 개비는 0.1 단위로 반올림한 뒤 원 계산 (표시되는 개비 × 개비당 가격과 맞도록, 부동소수 오차 방지)
+                    const won10 = c10 => Math.round(c10 * pricePerCig() / 10);
                     const c10 = Math.round(cigs * 10);
                     st.sinceCigs = c10 / 10;
                     st.sinceWon = won10(c10);
@@ -1172,11 +1201,11 @@
             if (baseline != null && goal != null) {
                 const perDayCigs = Math.round((baseline - goal) * 10) / 10;
                 st.goalCigsPerDay = perDayCigs;
-                st.goalSaveDay = Math.round(perDayCigs * PRICE_PER_CIGARETTE);
+                st.goalSaveDay = Math.round(perDayCigs * pricePerCig());
                 const [yy, mo] = todayStr.split('-').map(Number);
                 st.monthDays = new Date(yy, mo, 0).getDate();   // 이번 달 일수
-                st.goalSaveMonth = Math.round(perDayCigs * st.monthDays * PRICE_PER_CIGARETTE);
-                st.goalSaveYear = Math.round(perDayCigs * 365 * PRICE_PER_CIGARETTE);
+                st.goalSaveMonth = Math.round(perDayCigs * st.monthDays * pricePerCig());
+                st.goalSaveYear = Math.round(perDayCigs * 365 * pricePerCig());
             }
             return st;
         }
@@ -1236,6 +1265,9 @@
             el.innerHTML = html;
             const calc = document.getElementById('goal-calc-detail');
             if (calc) calc.innerHTML = goalCalcHtml(st);
+            const hp = document.getElementById('goal-help-price');
+            if (hp) hp.textContent = L(`1갑 ${packPrice().toLocaleString()}원 기준.`, `Based on ₩${packPrice().toLocaleString()} per pack.`);
+            renderPackPriceRow();
         }
 
         function signedWon(v) { return (v > 0 ? '+' : '') + wonText(v); }
@@ -1250,7 +1282,7 @@
         function goalCumPoints(st, todayStr) {
             const days = st.series.filter(d => d.date >= st.startDate && d.date < todayStr);
             let c = 0;
-            return days.map(d => { c += st.baseline - d.count; return { date: d.date, won: Math.round(Math.round(c * 10) * PRICE_PER_CIGARETTE / 10) }; });
+            return days.map(d => { c += st.baseline - d.count; return { date: d.date, won: Math.round(Math.round(c * 10) * pricePerCig() / 10) }; });
         }
         function goalSparkHtml(st, todayStr) {
             const pts = goalCumPoints(st, todayStr);
@@ -1352,7 +1384,7 @@
         function goalFooterHtml(st) {
             // 기준 한 줄 (탭하면 설정 열림, 높이 44px 이상)
             if (st.baseline == null) return '';
-            const parts = [L(`하루 ${st.baseline}개비${st.baselineAuto ? '' : '(직접)'}`, `${st.baseline}/day${st.baselineAuto ? '' : ' (manual)'}`), L(`${PRICE_PER_CIGARETTE}원/개비`, `₩${PRICE_PER_CIGARETTE}/cig`)];
+            const parts = [L(`하루 ${st.baseline}개비${st.baselineAuto ? '' : '(직접)'}`, `${st.baseline}/day${st.baselineAuto ? '' : ' (manual)'}`), L(`${cigPriceNum()}원/개비`, `₩${cigPriceNum()}/cig`)];
             if (st.startDate) parts.push(L(`${gdMD(st.startDate)} 시작`, `from ${gdMD(st.startDate)}`));
             return `<button type="button" id="goal-basis" onclick="openGoalSettings()" class="mt-3 -mx-1 px-1 w-[calc(100%+0.5rem)] min-h-[44px] flex items-center justify-between gap-2 text-left text-xs text-zinc-500 rounded-xl">
                 <span class="tabular-nums">${L('기준', 'Basis')}: ${parts.join(' · ')}</span><span class="shrink-0 text-zinc-400">${L('수정', 'Edit')} ›</span></button>`;
@@ -1373,14 +1405,62 @@
                 items.push(`<li id="goal-baseline-info">${L(`기준 ${st.baseline}개비`, `Baseline ${st.baseline}`)} ${src}</li>`);
             }
             if (st.startDate && st.sinceDays != null) {
-                items.push(`<li>${L(`아낀 금액 = (기준 − 그날 개비) × ${PRICE_PER_CIGARETTE}원을 목표 시작일부터 어제까지 더한 값. 오늘은 자정에 합산돼요.`, `Saved = (baseline − that day) × ₩${PRICE_PER_CIGARETTE}, summed from the start to yesterday. Today is added at midnight.`)}</li>`);
+                items.push(`<li>${L(`아낀 금액 = (기준 − 그날 개비) × ${cigPriceNum()}원을 목표 시작일부터 어제까지 더한 값. 오늘은 자정에 합산돼요.`, `Saved = (baseline − that day) × ₩${cigPriceNum()}, summed from the start to yesterday. Today is added at midnight.`)}</li>`);
                 items.push(`<li>${L(`연속 달성 = 하루 ${st.goal}개비 이하인 날이 이어진 기간 (오늘 포함, 기록 없는 날은 0개비). 목표 시작 전 날이 들어갈 수 있어요.`, `Streak = consecutive days at or under ${st.goal} (incl. today; no-record days count as 0). May include days before the start.`)}</li>`);
             }
             if (st.avg30 != null) items.push(`<li>${L('현재 흡연량은 오늘을 뺀 평균. 7일 평균이 30일 평균과 0.3개비 이상 차이 나면 ↑/↓, 아니면 →.', 'Averages exclude today. ↑/↓ when the 7-day avg differs from the 30-day avg by 0.3+, otherwise →.')}</li>`);
-            if (st.goalSaveDay > 0) items.push(`<li id="goal-formula">${L(`예상 절약: 기준 ${st.baseline}개비 − 목표 ${st.goal}개비 = 하루 ${st.goalCigsPerDay}개비 × ${PRICE_PER_CIGARETTE}원 (이번 달 ${st.monthDays}일, 1년 365일)`, `Expected: baseline ${st.baseline} − goal ${st.goal} = ${st.goalCigsPerDay}/day × ₩${PRICE_PER_CIGARETTE} (this month ${st.monthDays} days, year 365)`)}</li>`);
+            if (st.goalSaveDay > 0) items.push(`<li id="goal-formula">${L(`예상 절약: 기준 ${st.baseline}개비 − 목표 ${st.goal}개비 = 하루 ${st.goalCigsPerDay}개비 × ${cigPriceNum()}원 (이번 달 ${st.monthDays}일, 1년 365일)`, `Expected: baseline ${st.baseline} − goal ${st.goal} = ${st.goalCigsPerDay}/day × ₩${cigPriceNum()} (this month ${st.monthDays} days, year 365)`)}</li>`);
             if (!items.length) return '';
             return `<div class="text-xs text-zinc-400 font-semibold mt-3 mb-1">ⓘ ${L('계산 기준', 'How it is calculated')}</div><ul class="text-xs text-zinc-500 leading-relaxed list-disc pl-4 space-y-1">${items.join('')}</ul>`;
         }
+
+        // ===== PACK_PRICE_V9: 1갑 가격 설정 =====
+        function renderPackPriceRow() {
+            const v = document.getElementById('pack-price-val'), sub = document.getElementById('pack-price-sub');
+            if (v) v.textContent = wonText(packPrice());
+            if (sub) sub.textContent = L(`${CIGARETTES_PER_PACK}개비 · 개비당 ${cigPriceNum()}원`, `${CIGARETTES_PER_PACK} cigs · ₩${cigPriceNum()} each`);
+        }
+        function fmtPriceInput(el) {
+            const digits = String(el.value).replace(/[^0-9]/g, '').replace(/^0+/, '').slice(0, 5);
+            el.value = digits ? Number(digits).toLocaleString('ko-KR') : '';
+        }
+        function packPriceMsg(text, warn) {
+            const m = document.getElementById('pack-price-msg'); if (!m) return;
+            m.textContent = text || (window.__lang === 'en' ? I18N.packHelp[1] : I18N.packHelp[0]);
+            m.classList.toggle('text-amber-300/90', !!warn); m.classList.toggle('text-zinc-500', !warn);
+        }
+        function openPackPriceEdit() {
+            const row = document.getElementById('pack-price-row'), form = document.getElementById('pack-price-form'), inp = document.getElementById('pack-price-input');
+            row.classList.add('hidden'); form.classList.remove('hidden');
+            inp.value = packPrice().toLocaleString('ko-KR'); packPriceMsg();
+            try { inp.focus(); inp.select(); } catch (e) {}
+        }
+        function closePackPriceEdit() {
+            document.getElementById('pack-price-form').classList.add('hidden');
+            document.getElementById('pack-price-row').classList.remove('hidden');
+            const inp = document.getElementById('pack-price-input'); if (inp) inp.blur();
+        }
+        function savePackPrice() {
+            const inp = document.getElementById('pack-price-input');
+            const raw = String(inp.value).replace(/[,\s원₩]/g, '');
+            const n = /^\d+$/.test(raw) ? Number(raw) : NaN;
+            const v = validPackPrice(n);
+            if (v == null) { packPriceMsg(L('1,000~50,000 사이 숫자(원)로 입력해 주세요.', 'Please enter a whole number between 1,000 and 50,000.'), true); try { inp.focus(); } catch (e) {} return; }
+            if (v !== packPrice() || goalSettings.packPrice == null) {
+                goalSettings = { ...goalSettings, packPrice: v };
+                saveGoalSettings();   // 목표 설정과 함께 저장·동기화 (수정 시각 갱신)
+            }
+            closePackPriceEdit();
+            renderAll();
+            if (!document.getElementById('prediction-section').classList.contains('hidden')) showPrediction();
+            showToast(L(`1갑 ${v.toLocaleString()}원으로 바꿨어요 · 개비당 ${cigPriceNum()}원`, `Pack price set to ₩${v.toLocaleString()} · ₩${cigPriceNum()} each`));
+        }
+        (function () {
+            const inp = document.getElementById('pack-price-input');
+            if (!inp) return;
+            inp.addEventListener('input', () => { fmtPriceInput(inp); packPriceMsg(); });
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); savePackPrice(); } else if (e.key === 'Escape') { e.preventDefault(); closePackPriceEdit(); } });
+        })();
 
         function applySuggestedGoal() {
             const s = suggestGoal(records, goalLocalToday());
@@ -1515,7 +1595,7 @@
                 const mins = Math.round((Date.now() - last.getTime()) / 60000);
                 if (mins >= 0 && mins < 24*60) lines.push(L(`마지막 기록 후 약 ${mins >= 60 ? Math.floor(mins/60) + '시간 ' : ''}${mins % 60}분 지났어요.`, `About ${mins >= 60 ? Math.floor(mins/60) + 'h ' : ''}${mins % 60}m since your last log.`));
             }
-            lines.push(L(`오늘 사용한 비용은 약 ${Math.round(todayTotal * PRICE_PER_CIGARETTE).toLocaleString()}원이에요.`, `Spent today: about ${wonText(Math.round(todayTotal * PRICE_PER_CIGARETTE))}.`));
+            lines.push(L(`오늘 사용한 비용은 약 ${Math.round(todayTotal * pricePerCig()).toLocaleString()}원이에요.`, `Spent today: about ${wonText(Math.round(todayTotal * pricePerCig()))}.`));
             return lines.slice(0, 5);
         }
 
@@ -1599,9 +1679,9 @@
             const ch = avgR > 0 ? Math.round((avgF - avgR) / avgR * 100) : 0;
             lines.push(L(`최근 ${w}일 하루 평균은 ${rptFmt(avgR)}개비이고, 앞으로 ${label} 동안은 하루 약 ${rptFmt(avgF)}개비로 예상돼요.`, `Your last ${w} days averaged ${rptFmt(avgR)}/day; over the next ${label} period about ${rptFmt(avgF)}/day is expected.`));
             lines.push(Math.abs(ch) < 5 ? L('전체적으로 지금과 비슷한 흐름이 이어질 가능성이 높아요.', 'The current trend will likely continue.') : ch > 0 ? L(`조금씩 늘어나는 추세로, 약 ${ch}% 증가할 가능성이 있어요.`, `Slowly rising; may increase about ${ch}%.`) : L(`조금씩 줄어드는 추세로, 약 ${-ch}% 감소할 가능성이 있어요.`, `Slowly falling; may decrease about ${-ch}%.`));
-            lines.push(L(`${label} 예상 총량은 약 ${Math.round(total).toLocaleString()}개비(${rptFmt(total / CIGARETTES_PER_PACK)}갑), 비용은 약 ${Math.round(total * PRICE_PER_CIGARETTE).toLocaleString()}원이에요.`, `Expected ${label} total: about ${Math.round(total).toLocaleString()} (${rptFmt(total / CIGARETTES_PER_PACK)} packs), costing about ${wonText(Math.round(total * PRICE_PER_CIGARETTE))}.`));
+            lines.push(L(`${label} 예상 총량은 약 ${Math.round(total).toLocaleString()}개비(${rptFmt(total / CIGARETTES_PER_PACK)}갑), 비용은 약 ${Math.round(total * pricePerCig()).toLocaleString()}원이에요.`, `Expected ${label} total: about ${Math.round(total).toLocaleString()} (${rptFmt(total / CIGARETTES_PER_PACK)} packs), costing about ${wonText(Math.round(total * pricePerCig()))}.`));
             const saveDay = Math.max(1, Math.round(avgF * 0.2));
-            lines.push(L(`하루 ${saveDay}개비만 줄여도 ${label} 동안 약 ${Math.round(saveDay * days * PRICE_PER_CIGARETTE).toLocaleString()}원을 아낄 수 있어요.`, `Cutting just ${saveDay} per day would save about ${wonText(Math.round(saveDay * days * PRICE_PER_CIGARETTE))} over the ${label} period.`));
+            lines.push(L(`하루 ${saveDay}개비만 줄여도 ${label} 동안 약 ${Math.round(saveDay * days * pricePerCig()).toLocaleString()}원을 아낄 수 있어요.`, `Cutting just ${saveDay} per day would save about ${wonText(Math.round(saveDay * days * pricePerCig()))} over the ${label} period.`));
             if (days > 30) lines.push(L(`약 ${filled.length}일치 기록 기반이라 장기 예측은 대략적인 참고용이에요.`, `Based on about ${filled.length} days of records, so the long-range forecast is a rough guide.`));
             return lines.slice(0, 5);
         }
@@ -1612,7 +1692,7 @@
             const months = Object.keys(m).sort();
             if (!months.length) return [L('아직 월별로 분석할 기록이 없어요.', 'No records to analyse by month yet.')];
             if (window.__lang === 'en') return buildMonthlyReportEn(m, months, mode);
-            const val = c => mode === 'cost' ? Math.round(c * PRICE_PER_CIGARETTE) : c;
+            const val = c => mode === 'cost' ? Math.round(c * pricePerCig()) : c;
             const unit = mode === 'cost' ? '원' : '개비';
             const fmt = v => Math.round(v).toLocaleString() + unit;
             const mm = k => `${Number(k.slice(5))}월`;
@@ -1642,7 +1722,7 @@
         }
 
         function buildMonthlyReportEn(m, months, mode) {
-            const val = c => mode === 'cost' ? Math.round(c * PRICE_PER_CIGARETTE) : c;
+            const val = c => mode === 'cost' ? Math.round(c * pricePerCig()) : c;
             const fmt = v => mode === 'cost' ? wonText(Math.round(v)) : Math.round(v).toLocaleString() + ' cigs';
             const mm = k => MON_EN[Number(k.slice(5)) - 1];
             const chg = c => c === 0 ? 'no change' : c > 0 ? `up ${c}%` : `down ${-c}%`;
@@ -1952,8 +2032,10 @@
             p30: ['30일', '30 days'], p180: ['6개월', '6 months'], p365: ['1년', '1 year'],
             goalSet: ['⚙️ 목표 · 기준 설정', '⚙️ Goal & baseline settings'], goalLbl: ['하루 목표 (개비 이하)', 'Daily goal (max per day)'],
             baseLbl: ['절약 기준 (하루 개비)', 'Savings baseline (per day)'], startLbl: ['목표 시작일', 'Goal start date'],
-            goalHelp: ['목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균). 1갑 4,500원 기준.', 'Leave the goal empty for no goal / leave the baseline empty to use the average of the 30 days before the goal start (first 14 days if fewer than 7 days before the start). Based on ₩4,500 per pack.'],
-            save: ['저장', 'Save'],
+            goalHelp: ['목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균).', 'Leave the goal empty for no goal / leave the baseline empty to use the average of the 30 days before the goal start (first 14 days if fewer than 7 days before the start).'],
+            save: ['저장', 'Save'], cancel: ['취소', 'Cancel'],
+            packLbl: ['1갑 가격', 'Pack price'], packEdit: ['변경 ›', 'Edit ›'], packInLbl: ['1갑 가격 (20개비, 원)', 'Price per pack (20 cigarettes, KRW)'],
+            packHelp: ['1,000~50,000원. 지출·절약 금액 계산에 쓰여요.', '₩1,000–50,000. Used for spending and savings amounts.'],
             syncDesc: ['로그인하지 않아도 모든 기능을 쓸 수 있어요. 로그인하면 여러 기기에서 기록을 함께 볼 수 있어요.', 'Every feature works without logging in. Log in to see your records on multiple devices.'],
             syncLogin: ['구글로 로그인해서 동기화', 'Sign in with Google to sync'], acct: ['계정', 'Account'], lastSync: ['마지막 동기화:', 'Last sync:'],
             syncNow: ['지금 동기화', 'Sync now'], logout: ['로그아웃', 'Log out'],
