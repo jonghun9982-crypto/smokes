@@ -1511,23 +1511,25 @@
             if (action === 'deleteAll') return cap ? L('전체 삭제', 'Delete all') : L('전체 삭제', 'delete all');
             return cap ? L('마지막 작업', 'Last action') : L('마지막 작업', 'last action');   // 알 수 없는/예전 스냅샷 (예: v4 'dedup')
         }
-        function dupNote(k) { return k > 0 ? L(`\n중복 기록 ${k}개도 함께 정리돼요.`, `\n${k} duplicate records will also be removed.`) : ''; }
         function undoLastAction() {
             const u = loadUndo();
             if (!u) return;
             const label = undoActionLabel(u.action);
-            const addedIds = Array.isArray(u.addedIds) ? u.addedIds : null;
-            if (u.action === 'import' && addedIds) {
-                // 불러오기로 추가된 기록만 제거 (그 뒤에 남긴 +1 기록은 유지)
-                const added = new Set(addedIds.map(String));
+            // v5에서 만든 불러오기 스냅샷(추가한 id만 기록)은 v5 방식으로: 추가된 기록만 제거
+            const v5Import = u.action === 'import' && Array.isArray(u.addedIds) && u.mode !== 'replace';
+            if (v5Import) {
+                const added = new Set(u.addedIds.map(String));
                 const drop = records.filter(r => added.has(String(r.id)));
-                const k = findDuplicateRecords(records.filter(r => !added.has(String(r.id)))).remove.length;
-                if (!confirm(L(`'${label}'를 되돌릴까요?\n불러온 기록 ${drop.length}건을 지워요. (그 뒤에 남긴 기록은 유지돼요)`, `Undo '${label}'?\n${drop.length} imported records will be removed (records added afterwards are kept).`) + dupNote(k))) return;
-                addTombstones(drop);   // 다른 기기에서도 지워지도록 삭제 표시
+                if (!confirm(L(`'${label}'를 되돌릴까요?\n불러온 기록 ${drop.length}건을 지워요.`, `Undo '${label}'?\n${drop.length} imported records will be removed.`))) return;
+                addTombstones(drop);
                 records = records.filter(r => !added.has(String(r.id)));
             } else {
-                const k = findDuplicateRecords(u.records).remove.length;
-                if (!confirm(L(`'${label}' 이전 상태로 되돌릴까요?\n기록 ${u.records.length}건과 목표 설정이 복원돼요. (지금 기록은 대체돼요)`, `Restore the state before '${label}'?\n${u.records.length} records and goal settings will be restored (current records will be replaced).`) + dupNote(k))) return;
+                if (!confirm(L(`'${label}' 이전 상태로 되돌릴까요?\n기록 ${u.records.length}건과 목표 설정이 복원돼요. (지금 기록은 대체돼요)`, `Restore the state before '${label}'?\n${u.records.length} records and goal settings will be restored (current records will be replaced).`))) return;
+                // 불러오기로 들어온 기록은 삭제 표시 → 동기화된 다른 기기에서도 빠지도록
+                if (Array.isArray(u.importedIds) && u.importedIds.length) {
+                    const imp = new Set(u.importedIds.map(String));
+                    addTombstones(records.filter(r => imp.has(String(r.id))));
+                }
                 records = u.records;
             }
             // 이 작업으로 생긴 삭제 표시 제거 → 동기화 때 복원한 기록이 다시 지워지지 않게
@@ -1536,8 +1538,7 @@
             const res = loadResurrect(), ts = Date.now();
             keys.forEach(k => { res[k] = ts; });
             saveResurrect(mergeResurrect(res, {}));
-            const dupCleaned = dedupeRecords();   // 복원 후 중복 자동 정리 (삭제 표시는 살림 표시 뒤에 붙여 동기화에서도 정리됨)
-            if (!(u.action === 'import' && addedIds)) {   // 불러오기는 목표 설정을 바꾸지 않으므로 그 뒤 바꾼 목표는 유지
+            if (!v5Import) {
                 goalSettings = { dailyGoal: u.goalSettings ? u.goalSettings.dailyGoal ?? null : null, baseline: u.goalSettings ? u.goalSettings.baseline ?? null : null };
                 saveGoalSettings();
             }
@@ -1545,7 +1546,7 @@
             saveData();   // 로그인 상태면 동기화 예약
             renderAll();
             hideUndoToast();
-            showToast(L(`되돌렸어요. 기록 ${records.length}건을 복원했어요.`, `Restored ${records.length} records.`) + dupMsg(dupCleaned));
+            showToast(L(`되돌렸어요. 기록 ${records.length}건을 복원했어요.`, `Restored ${records.length} records.`));
         }
         let undoToastTimer = null;
         function hideUndoToast() { const t = document.getElementById('undo-toast'); if (t) t.remove(); clearTimeout(undoToastTimer); }
@@ -1569,38 +1570,6 @@
             }
         }
 
-        // ===== IMPORT_DEDUP_V4: 중복 판별 키 = 현지 날짜 + 시간(초) + 개수 + 메모 (내보내기와 같은 현지 시간 해석) =====
-        function recordDedupKey(r) {
-            const d = new Date(r && r.datetime);
-            const when = isNaN(d) ? `?${r && r.datetime}` : `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-            const note = String((r && r.note) || '').replace(/"/g, '').trim();   // CSV 왕복 시 따옴표가 빠지는 것과 맞춤
-            return `${when}|${parseInt(r && r.count)}|${note}`;
-        }
-        // 같은 키의 기록 중 하나만 남기고 나머지 목록 반환 (가장 먼저 만든 = id가 작은 기록을 남김)
-        function findDuplicateRecords(recs) {
-            const groups = new Map();
-            recs.forEach(r => { const k = recordDedupKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
-            const keep = [], remove = [];
-            groups.forEach(g => {
-                if (g.length === 1) { keep.push(g[0]); return; }
-                const sorted = [...g].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
-                keep.push(sorted[0]); remove.push(...sorted.slice(1));
-            });
-            return { keep, remove };
-        }
-        // 같은 키(초 단위 시각·개수·메모)의 기록을 하나만 남기고 정리. 동기화 삭제 표시 추가. 정리한 개수 반환 (저장은 호출한 쪽에서)
-        function dedupeRecords() {
-            const { keep, remove } = findDuplicateRecords(records);
-            if (!remove.length) return 0;
-            // 남기는 기록과 동기화 키가 같은 경우(같은 id·시각 복제본)는 삭제 표시하지 않음 (남긴 기록까지 지워지지 않게)
-            const keepKeys = new Set(keep.map(syncRecordKey));
-            addTombstones(remove.filter(r => !keepKeys.has(syncRecordKey(r))));
-            const removeSet = new Set(remove);
-            records = records.filter(r => !removeSet.has(r));
-            return remove.length;
-        }
-        function dupMsg(k) { return k > 0 ? L(` 중복 ${k}개도 정리했어요.`, ` Also removed ${k} duplicates.`) : ''; }
-
         // ==================== 가장 강화된 CSV 불러오기 ====================
         function importCSV() {
             const input = document.createElement('input');
@@ -1614,13 +1583,11 @@
                 reader.onload = function(event) {
                     const text = event.target.result;
                     const lines = text.trim().split(/\r?\n/);
-                    let importedCount = 0, skippedCount = 0;
-                    // 기존 중복은 정리될 예정 → 남을 기록의 키 기준으로 판단. 같은 키는 하나만 (CSV 안의 반복 행도 건너뜀)
-                    const dupK = findDuplicateRecords(records).remove.length;
-                    const existing = new Set(records.map(recordDedupKey));
+                    // IMPORT_REPLACE_V6: 파일의 모든 유효한 행을 그대로 사용 (같은 행도 모두 유지) → 지금 기록을 통째로 교체
                     const usedIds = new Set(records.map(r => String(r.id)));
+                    loadTombstones().forEach(k => usedIds.add(String(k).split('|')[0]));   // 삭제 표시된 id와도 겹치지 않게
                     let nextId = Date.now();
-                    const toAdd = [];
+                    const parsed = [];
 
                     lines.forEach((line, index) => {
                         if (index === 0) return;
@@ -1670,31 +1637,24 @@
                         const datetime = `${formattedDate}T${formattedTime}`;
                         if (isNaN(new Date(datetime))) return;
 
-                        const row = { datetime: datetime, count: count, note: note };
-                        const k = recordDedupKey(row);
-                        if (existing.has(k)) { skippedCount++; return; }
-                        existing.add(k);
                         while (usedIds.has(String(nextId))) nextId++;
                         usedIds.add(String(nextId));
-                        toAdd.push({ id: nextId++, ...row });
+                        parsed.push({ id: nextId++, datetime: datetime, count: count, note: note });
                     });
 
-                    importedCount = toAdd.length;
-                    let backedUp = false;
-                    let cleaned = 0;
-                    if (importedCount > 0 || dupK > 0) {
-                        // 바뀌기 전에 되돌리기용 스냅샷 (불러오기는 CSV 자동 다운로드 생략) → 기존 중복 정리 → 새 기록 추가
-                        if (!autoBackup('import', { csv: false, extra: { addedIds: toAdd.map(r => r.id) } })) return;
-                        backedUp = true;
-                        cleaned = dedupeRecords();
-                        records = records.concat(toAdd);
-                        saveData();
-                        renderAll();
+                    const M = parsed.length, N = records.length;
+                    if (M === 0) {
+                        alert(L('불러올 수 있는 기록이 없어요. 파일 형식(날짜,시간,개수,메모)을 확인해 주세요.\n지금 기록은 그대로예요.', 'No records could be read from this file. Please check the format (date,time,count,note).\nYour current records were not changed.'));
+                        return;
                     }
-                    const msg = L(`${importedCount}개 추가, ${skippedCount}개는 이미 있어 건너뜀`, `${importedCount} added, ${skippedCount} skipped (already exist)`)
-                        + (cleaned > 0 ? L(`, 기존 중복 ${cleaned}개 정리`, `, ${cleaned} existing duplicates removed`) : '');
-                    if (backedUp) showToast(msg, true);
-                    alert(msg);
+                    if (!confirm(L(`지금 기록 ${N}개를 비우고 파일의 기록 ${M}개로 바꿀게요.\n실행 전에 지금 기록을 자동으로 백업해요 (CSV 파일 + 되돌리기).`, `Your current ${N} records will be cleared and replaced with the ${M} records from the file.\nYour current records are backed up automatically first (CSV file + undo).`))) return;
+                    if (!autoBackup('import', { extra: { mode: 'replace', importedIds: parsed.map(r => r.id) } })) return;
+                    // 기존 기록은 삭제 표시 (전체 삭제와 같은 방식) → 클라우드/다른 기기의 예전 기록이 다시 합쳐지지 않게
+                    addTombstones(records);
+                    records = parsed;
+                    saveData();
+                    renderAll();
+                    showToast(L(`${M}개의 기록으로 바꾸었어요.`, `Replaced with ${M} records.`), true);
                 };
                 reader.readAsText(file, 'UTF-8');
             };
