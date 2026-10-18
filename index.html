@@ -363,8 +363,12 @@
                         <label class="text-xs text-zinc-400"><span data-i18n="baseLbl">절약 기준 (하루 개비)</span>
                             <input id="baseline-input" type="number" inputmode="decimal" min="0.1" step="0.1" class="mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-3 text-center text-base focus:outline-none focus:border-emerald-500">
                         </label>
+                        <label class="text-xs text-zinc-400 col-span-2"><span data-i18n="startLbl">목표 시작일</span>
+                            <input id="goal-start-input" type="date" class="mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-3 py-3 text-center text-base focus:outline-none focus:border-emerald-500" style="color-scheme: dark">
+                        </label>
                     </div>
-                    <p class="text-xs text-zinc-500 mt-2" data-i18n="goalHelp">비워두면 목표 없음 / 기준은 첫 14일 평균으로 자동 계산돼요. 1갑 4,500원 기준.</p>
+                    <p class="text-xs text-zinc-500 mt-2" data-i18n="goalHelp">목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균). 1갑 4,500원 기준.</p>
+                    <div id="goal-calc-detail"></div>
                     <button type="button" onclick="saveGoalFromInputs()" class="mt-3 w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-semibold" data-i18n="save">저장</button>
                 </details>
                 <div class="report-wrap">
@@ -1022,7 +1026,7 @@
             setRecords: (r) => { records = r; saveData(true); renderAll(); },
             getGoal: () => goalSettings,
             getGoalTs: () => Number(localStorage.getItem(SYNC_GOAL_TS_KEY) || 0),
-            setGoal: (g, ts) => { goalSettings = { dailyGoal: g.dailyGoal ?? null, baseline: g.baseline ?? null }; localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings)); localStorage.setItem(SYNC_GOAL_TS_KEY, String(ts || 0)); renderGoalCard(); },
+            setGoal: (g, ts) => { goalSettings = normalizeGoal(g, ts); localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings)); localStorage.setItem(SYNC_GOAL_TS_KEY, String(ts || 0)); renderGoalCard(); },
             getTombstones: loadTombstones,
             getResurrect: loadResurrect, setResurrect: saveResurrect, mergeResurrect, applyResurrect,
             setTombstones: (t) => { try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(t)); } catch (e) {} },
@@ -1035,16 +1039,30 @@
 
         // ===== 하루 목표 / 연속 달성 / 절약 =====
         const GOAL_KEY = 'smokingGoalSettings';   // 기록 데이터(smokingRecordsAdvanced)와 별도 저장
-        let goalSettings = { dailyGoal: null, baseline: null };
+        let goalSettings = { dailyGoal: null, baseline: null, startDate: null };
 
+        // GOAL_START_V7: startDate(YYYY-MM-DD, 현지)는 선택 필드. 예전 {dailyGoal, baseline}도 그대로 읽힘
+        function validDateStr(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T00:00:00')) ? v : null; }
+        function defaultGoalStart(ts) { const t = Number(ts) || 0; const d = t > 0 ? new Date(t).toLocaleDateString('sv-SE') : goalLocalToday(); return d > goalLocalToday() ? goalLocalToday() : d; }
+        function normalizeGoal(g, ts) {
+            g = g || {};
+            const out = {
+                dailyGoal: Number.isFinite(g.dailyGoal) && g.dailyGoal >= 0 ? g.dailyGoal : null,
+                baseline: Number.isFinite(g.baseline) && g.baseline > 0 ? g.baseline : null,
+                startDate: validDateStr(g.startDate)
+            };
+            // 시작일 없는 예전 목표: 목표를 마지막으로 저장한 날(smokingGoalUpdatedAt), 없으면 오늘
+            if (out.dailyGoal != null && !out.startDate) out.startDate = defaultGoalStart(ts);
+            if (out.dailyGoal == null) out.startDate = null;
+            return out;
+        }
         function loadGoalSettings() {
             try {
-                const g = JSON.parse(localStorage.getItem(GOAL_KEY) || '{}') || {};
-                goalSettings = {
-                    dailyGoal: Number.isFinite(g.dailyGoal) && g.dailyGoal >= 0 ? g.dailyGoal : null,
-                    baseline: Number.isFinite(g.baseline) && g.baseline > 0 ? g.baseline : null
-                };
-            } catch (e) { goalSettings = { dailyGoal: null, baseline: null }; }
+                const raw = JSON.parse(localStorage.getItem(GOAL_KEY) || '{}') || {};
+                goalSettings = normalizeGoal(raw, localStorage.getItem(SYNC_GOAL_TS_KEY));
+                // 기본 시작일을 정했으면 고정 저장 (수정 시각은 건드리지 않아 동기화 우선순위는 그대로)
+                if (goalSettings.startDate && raw.startDate !== goalSettings.startDate) localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings));
+            } catch (e) { goalSettings = { dailyGoal: null, baseline: null, startDate: null }; }
         }
         function saveGoalSettings() {
             localStorage.setItem(GOAL_KEY, JSON.stringify(goalSettings));
@@ -1066,12 +1084,19 @@
             return out;
         }
 
-        function defaultBaseline(recs, todayStr) {
+        // BASELINE_V7: 자동 기준 = 목표 시작일 직전 30일(달력 기준, 기록 없는 날 0개비, 첫 기록일 이후만) 평균.
+        // 그런 날이 7일 미만이면 예전 방식(기록 처음 14일 평균)으로 대체. 목표가 없으면 시작일 = 오늘로 가정.
+        function baselineInfo(recs, todayStr, startDate) {
             const s = goalDailySeries(recs, todayStr).filter(d => d.date < todayStr);
-            const first = s.slice(0, 14);
-            if (!first.length) return null;
-            return Math.round(first.reduce((a,b)=>a+b.count,0) / first.length * 10) / 10;
+            const start = startDate && startDate <= todayStr ? startDate : todayStr;
+            const pre = s.filter(d => d.date < start).slice(-30);
+            let days, mode;
+            if (pre.length >= 7) { days = pre; mode = 'pre30'; }
+            else { days = s.slice(0, 14); mode = 'first14'; }
+            if (!days.length) return null;
+            return { value: Math.round(days.reduce((a,b)=>a+b.count,0) / days.length * 10) / 10, mode, from: days[0].date, to: days[days.length-1].date, days: days.length };
         }
+        function defaultBaseline(recs, todayStr, startDate) { const b = baselineInfo(recs, todayStr, startDate); return b ? b.value : null; }
 
         function suggestGoal(recs, todayStr) {
             const past = goalDailySeries(recs, todayStr).filter(d => d.date < todayStr).slice(-14);
@@ -1084,7 +1109,8 @@
         function computeGoalStats(recs, settings, todayStr) {
             const series = goalDailySeries(recs, todayStr);
             const goal = settings.dailyGoal;
-            const baseline = settings.baseline != null ? settings.baseline : defaultBaseline(recs, todayStr);
+            const bInfo = settings.baseline != null ? null : baselineInfo(recs, todayStr, settings.dailyGoal != null ? settings.startDate : null);
+            const baseline = settings.baseline != null ? settings.baseline : (bInfo ? bInfo.value : null);
             const today = series.find(d => d.date === todayStr) || { date: todayStr, count: 0 };
             const st = { goal, baseline, todayCount: today.count, series, currentStreak: 0, bestStreak: 0, pastDays: 0, pastAchieved: 0 };
             if (goal != null && series.length) {
@@ -1108,6 +1134,39 @@
                 st.savedMonth = Math.round(series.filter(d => d.date.slice(0,7) === month).reduce((a,d)=>a+saved(d),0));
                 st.savedTotal = Math.round(series.reduce((a,d)=>a+saved(d),0));
                 st.savedCigsTotal = Math.round(series.reduce((a,d)=>a+(baseline - d.count),0));
+            }
+            // 기준 설명 + 최근 30일 평균 (둘 다 '끝난 날'만, 기록 없는 날은 0개비로 포함)
+            const pastDays = series.filter(d => d.date < todayStr);
+            st.baselineAuto = settings.baseline == null;
+            if (bInfo) { st.baselineMode = bInfo.mode; st.baselineFrom = bInfo.from; st.baselineTo = bInfo.to; st.baselineDays = bInfo.days; }
+            // 현재 흡연량: 최근 30일 / 7일 평균 (끝난 날만 = 오늘 제외, 기록 없는 날 0개비, 첫 기록일 이후만)
+            const avgOf = a => Math.round(a.reduce((x,d)=>x+d.count,0) / a.length * 10) / 10;
+            const l30 = pastDays.slice(-30), l7 = pastDays.slice(-7);
+            if (l30.length) { st.avg30 = avgOf(l30); st.avg30Days = l30.length; }
+            if (l7.length) { st.avg7 = avgOf(l7); st.avg7Days = l7.length; }
+            // GOAL_START_V7: 목표 시작 후 실제 절약 (시작일 ~ 어제, 끝난 날만) / 오늘은 따로 / 현재 연속 기간 절약
+            if (goal != null && settings.startDate) {
+                const start = settings.startDate;
+                st.startDate = start;
+                st.dPlus = Math.round((Date.UTC(...todayStr.split('-').map((v,i)=>i===1?v-1:+v)) - Date.UTC(...start.split('-').map((v,i)=>i===1?v-1:+v))) / 86400000);
+                if (baseline != null) {
+                    const done = pastDays.filter(d => d.date >= start);
+                    const cigs = done.reduce((a,d)=>a+(baseline - d.count),0);
+                    st.sinceDays = done.length;
+                    // 개비는 0.1 단위로 반올림한 뒤 원 계산 (표시되는 개비 × 225원과 맞도록, 부동소수 오차 방지)
+                    const won10 = c10 => Math.round(c10 * PRICE_PER_CIGARETTE / 10);
+                    const c10 = Math.round(cigs * 10);
+                    st.sinceCigs = c10 / 10;
+                    st.sinceWon = won10(c10);
+                    st.sinceTodayWon = start <= todayStr ? won10(Math.round((baseline - today.count) * 10)) : null;
+                    // 연속 달성일 = currentStreak와 같은 날들 (오늘이 목표 이내면 오늘 포함)
+                    const sd = st.currentStreak > 0 ? series.filter(d => d.date <= todayStr).slice(-st.currentStreak) : [];
+                    const sc = sd.reduce((a,d)=>a+(baseline - d.count),0);
+                    const s10 = Math.round(sc * 10);
+                    st.streakCigs = s10 / 10;
+                    st.streakWon = won10(s10);
+                    st.streakIncludesToday = st.currentStreak > 0;
+                }
             }
             // GOAL_SAVINGS_V4: 목표를 지켰을 때의 예상 절약 = (기준 - 목표) × 개비당 가격 → 목표에 따라 바뀜
             if (baseline != null && goal != null) {
@@ -1141,41 +1200,137 @@
                 baseInput.value = goalSettings.baseline != null ? goalSettings.baseline : '';
                 baseInput.placeholder = st.baseline != null ? L(`자동 ${st.baseline}`, `Auto ${st.baseline}`) : L('예: 15', 'e.g. 15');
             }
+            const startInput = document.getElementById('goal-start-input');
+            if (startInput && document.activeElement !== startInput) { startInput.value = goalSettings.startDate || todayStr; startInput.max = todayStr; startInput.style.colorScheme = (typeof isLight === 'function' && isLight()) ? 'light' : 'dark'; }
             let html = '';
             if (st.goal == null) {
                 html += L(`<p class="text-sm text-zinc-400">아직 목표가 없어요.${sug != null ? ` 최근 평균을 보면 <b class="text-white">하루 ${sug}개비 이하</b>를 추천해요.` : ''}</p>`, `<p class="text-sm text-zinc-400">No goal yet.${sug != null ? ` Based on your recent average, we suggest <b class="text-white">${sug} or fewer per day</b>.` : ''}</p>`);
                 if (sug != null) html += `<button type="button" onclick="applySuggestedGoal()" class="mt-2 px-3 py-2 rounded-xl bg-emerald-600 text-sm font-semibold">${L('추천 목표 사용하기', 'Use suggested goal')}</button>`;
             } else {
+                // DESIGN_V7D: 1차(히어로) = 오늘 진행 상황. 카드에서 가장 큰 숫자는 이것 하나
                 const over = st.todayCount > st.goal;
                 const pct = st.goal > 0 ? Math.min(100, st.todayCount / st.goal * 100) : (st.todayCount > 0 ? 100 : 0);
-                const color = over ? '#f87171' : '#22c55e';
+                const color = over ? '#f59e0b' : '#22c55e';   // 초과는 빨강 대신 중립적인 주황
                 const remain = st.goal - st.todayCount;
-                html += `<div class="flex justify-between items-end mb-1"><span class="text-sm text-zinc-400">${L(`오늘 ${st.todayCount} / 목표 ${st.goal}개비`, `Today ${st.todayCount} / goal ${st.goal}`)}</span>
-                    <span class="text-sm font-semibold" style="color:${color}">${over ? L(`${-remain}개비 초과`, `${-remain} over`) : L(`${remain}개비 남음`, `${remain} left`)}</span></div>
+                html += `<div id="goal-today">
+                    <div class="flex justify-between items-center"><span class="text-sm text-zinc-400">${L('오늘', 'Today')}</span>
+                        <span class="text-sm font-semibold ${over ? 'text-amber-300/90' : 'text-emerald-400'}">${over ? L(`목표보다 ${-remain}개비 많아요`, `${-remain} above goal`) : L(`${remain}개비 남음`, `${remain} left`)}</span></div>
+                    <div class="flex items-baseline gap-1.5 mt-1 mb-3"><span class="text-5xl font-bold tabular-nums tracking-tight">${st.todayCount}</span><span class="text-lg font-medium text-zinc-400">${L(`/ ${st.goal}개비`, `/ ${st.goal}`)}</span></div>
                     <div class="w-full h-3 rounded-full bg-zinc-900 overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax="${st.goal}" aria-valuenow="${st.todayCount}">
                         <div style="width:${pct}%;background:${color};height:100%;transition:width .3s"></div></div>
-                    <div class="grid grid-cols-2 gap-2 mt-3 text-center">
-                        <div class="bg-zinc-900/60 rounded-2xl p-3"><div class="text-xs text-zinc-400">${L('연속 달성', 'Current streak')}</div><div class="text-2xl font-bold">${st.currentStreak}<span class="text-sm text-zinc-400">${L('일', ' days')}</span></div></div>
-                        <div class="bg-zinc-900/60 rounded-2xl p-3"><div class="text-xs text-zinc-400">${L('최고 기록', 'Best streak')}</div><div class="text-2xl font-bold">${st.bestStreak}<span class="text-sm text-zinc-400">${L('일', ' days')}</span></div></div>
-                    </div>`;
+                </div>`;
+                html += goalActualHtml(st, todayStr);
             }
-            // GOAL_SAVINGS_V5: 실제 절약 블록 제거, 목표 기준 예상 절약만 같은 3칸 레이아웃으로 표시
+            html += baselineInfoHtml(st);
+            // 목표를 지키면 예상 절약: 기존 3칸 그대로 (공식 문구만 설정 안 '계산 기준'으로 이동)
             if (st.goalSaveDay != null) {
                 const pos = st.goalSaveDay > 0;
                 const cell = (label, v, k) => `<div class="bg-zinc-900/60 rounded-2xl p-2"><div class="text-xs text-zinc-400">${label}</div><div class="text-base font-bold ${pos ? 'text-emerald-400' : 'text-zinc-300'}" data-gs="${k}">${wonText(pos ? v : 0)}</div></div>`;
-                html += `<div class="mt-4" id="goal-projection"><div class="text-xs text-zinc-400 mb-1">${L(`목표(하루 ${st.goal}개비)를 지키면 예상 절약`, `If you keep your goal (${st.goal}/day), expected savings`)}</div>
+                html += `<div class="mt-6" id="goal-projection"><div class="text-xs text-zinc-400 mb-1">${L(`목표(하루 ${st.goal}개비)를 지키면 예상 절약`, `If you keep your goal (${st.goal}/day), expected savings`)}</div>
                     <div class="grid grid-cols-3 gap-2 text-center">${cell(L('오늘', 'Today'), st.goalSaveDay, 'day')}${cell(L('이번 달', 'This month'), st.goalSaveMonth, 'month')}${cell(L('1년', '1 year'), st.goalSaveYear, 'year')}</div>`;
-                html += pos
-                    ? `<p class="text-xs text-zinc-500 mt-2" id="goal-formula">${L(`기준 ${st.baseline}개비 − 목표 ${st.goal}개비 = 하루 ${st.goalCigsPerDay}개비 × ${PRICE_PER_CIGARETTE}원 (이번 달 ${st.monthDays}일, 1년 365일)`, `Baseline ${st.baseline} − goal ${st.goal} = ${st.goalCigsPerDay}/day × ₩${PRICE_PER_CIGARETTE} (this month ${st.monthDays} days, year 365)`)}</p>`
-                    : `<p class="text-xs text-zinc-400 mt-2" id="goal-formula">${L(`목표(${st.goal}개비)가 기준(${st.baseline}개비) 이상이라 목표를 지켜도 추가 절약은 없어요. 목표를 기준보다 낮게 잡아 보세요.`, `Your goal (${st.goal}) is at or above the baseline (${st.baseline}), so keeping it saves nothing extra. Try a goal below the baseline.`)}</p>`;
+                if (!pos) html += `<p class="text-xs text-zinc-400 mt-2" id="goal-formula-warn">${L(`목표(${st.goal}개비)가 기준(${st.baseline}개비) 이상이라 목표를 지켜도 추가 절약은 없어요. 목표를 기준보다 낮게 잡아 보세요.`, `Your goal (${st.goal}) is at or above the baseline (${st.baseline}), so keeping it saves nothing extra. Try a goal below the baseline.`)}</p>`;
                 html += `</div>`;
             }
+            html += goalFooterHtml(st);
             el.innerHTML = html;
+            const calc = document.getElementById('goal-calc-detail');
+            if (calc) calc.innerHTML = goalCalcHtml(st);
+        }
+
+        function signedWon(v) { return (v > 0 ? '+' : '') + wonText(v); }
+        function signedCigs(v) { return L(`${v > 0 ? '+' : ''}${rptFmt(v)}개비`, `${v > 0 ? '+' : ''}${rptFmt(v)} cigs`); }
+        // ---- 표시 전용 헬퍼 (계산에는 쓰지 않음) ----
+        function gdMD(d) { return d.slice(5).replace('-', '/'); }
+        function gdShift(d, n) { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+        // 숫자 + 작고 흐린 단위 (한국어), 영어는 기존 표기
+        const G_UNIT = 'text-[0.6em] font-medium text-zinc-400 ml-0.5';
+        function gNum(n, unitKo, unitEn) { return `${n}<span class="${G_UNIT}">${L(unitKo, unitEn || '')}</span>`; }
+        function gWon(v, sign) { const s = sign && v > 0 ? '+' : ''; return window.__lang === 'en' ? s + wonText(v) : `${s}${v < 0 ? '-' : ''}${Math.abs(v).toLocaleString()}<span class="${G_UNIT}">원</span>`; }
+        function goalActualHtml(st, todayStr) {
+            if (!st.startDate) return '';
+            // 2차: '목표 시작 후' 한 묶음. D+ 배지 + 같은 크기 3칸(아낀 금액 / 안 피운 개비 / 연속 달성) + 기간 한 줄
+            let h = `<div class="mt-6 bg-zinc-900/60 rounded-2xl p-4" id="goal-actual">
+                <div class="flex items-center justify-between gap-2"><span class="text-sm font-semibold text-zinc-300">${L('목표 시작 후', 'Since goal start')}</span>
+                <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-700 text-zinc-300 tabular-nums" id="goal-start">D+${st.dPlus} · ${L(`${gdMD(st.startDate)} 시작`, `from ${gdMD(st.startDate)}`)}</span></div>`;
+            if (st.sinceDays == null) return h + '</div>';
+            const has = st.sinceDays > 0, neg = has && st.sinceWon < 0;
+            const yest = gdShift(todayStr, -1);
+            const tile = (label, value, sub, attr) => `<div class="min-w-0"><div class="text-xs text-zinc-400">${label}</div><div class="text-xl font-bold tabular-nums tracking-tight mt-0.5 whitespace-nowrap" ${attr || ''}>${value}</div><div class="text-xs text-zinc-500 mt-0.5">${sub}</div></div>`;
+            const moneyVal = has ? `<span class="${neg ? 'text-zinc-300' : 'text-emerald-400'}">${gWon(st.sinceWon, true)}</span>` : `<span class="text-zinc-500">–</span>`;
+            const moneySub = has ? (st.sinceDays > 1 ? `${gdMD(st.startDate)}~${gdMD(yest)}` : gdMD(st.startDate)) : L('내일부터 집계', 'from tomorrow');
+            const cigVal = has ? gNum(rptFmt(neg ? -st.sinceCigs : st.sinceCigs), '개비', '') : `<span class="text-zinc-500">–</span>`;
+            const strVal = gNum(st.currentStreak, '일', st.currentStreak === 1 ? ' day' : ' days');
+            h += `<div class="grid grid-cols-3 gap-3 mt-4">
+                ${tile(L('아낀 금액', 'Saved'), moneyVal, moneySub, 'data-ga="since"')}
+                ${tile(neg ? L('더 피운 개비', 'Extra cigs') : L('안 피운 개비', 'Cigs avoided'), cigVal, has ? L(`${st.sinceDays}일 동안`, `${st.sinceDays} days`) : '&nbsp;')}
+                ${tile(L('연속 달성', 'Streak'), strVal, L(`최고 ${st.bestStreak}일`, `best ${st.bestStreak}`), 'id="goal-streak"')}
+            </div>`;
+            // 기간이 다른 두 금액을 한 줄씩, 기간을 날짜로 명시 (작고 흐리게)
+            const notes = [];
+            if (st.streakIncludesToday) {
+                const from = gdShift(todayStr, -(st.currentStreak - 1));
+                const range = st.currentStreak > 1 ? L(`${gdMD(from)}~오늘`, `${gdMD(from)}–today`) : L('오늘', 'today');
+                notes.push(`<span data-ga="streak">${L(`연속 달성 기간(${range}) 절약 <b class="text-zinc-300 tabular-nums">${signedWon(st.streakWon)}</b>`, `Saved during streak (${range}) <b class="text-zinc-300 tabular-nums">${signedWon(st.streakWon)}</b>`)}</span>`);
+            } else {
+                notes.push(`<span data-ga="streak">${L('새 연속 기록은 내일부터 다시 시작돼요', 'A new streak starts tomorrow')}</span>`);
+            }
+            if (st.sinceTodayWon != null) notes.push(`<span id="goal-today-note">${L(`오늘 진행 중 <b class="text-zinc-300 tabular-nums">${signedWon(st.sinceTodayWon)}</b> · 자정에 합산`, `Today so far <b class="text-zinc-300 tabular-nums">${signedWon(st.sinceTodayWon)}</b> · added at midnight`)}</span>`);
+            h += `<div class="border-t border-zinc-700 mt-4 pt-3 space-y-1 text-xs text-zinc-400">${notes.map(n => `<div>${n}</div>`).join('')}</div>`;
+            return h + '</div>';
+        }
+        function baselineInfoHtml(st) {
+            // 3차: 현재 흡연량 한 줄. 화살표 + 숫자(%) + 비교 기준을 함께 (색에만 의존하지 않음)
+            if (st.avg30 == null || st.avg7 == null) return '';
+            const diff = Math.round((st.avg7 - st.avg30) * 10) / 10;
+            const pctv = st.avg30 > 0 ? Math.round(Math.abs(st.avg7 - st.avg30) / st.avg30 * 100) : 0;
+            const t = diff <= -0.3 ? { k: 'down', a: '↓', c: 'text-emerald-400', w: `${pctv}%` }
+                    : diff >= 0.3 ? { k: 'up', a: '↑', c: 'text-red-400', w: `${pctv}%` }
+                    : { k: 'flat', a: '→', c: 'text-zinc-400', w: L('비슷', 'flat') };
+            return `<div class="mt-3 bg-zinc-900/60 rounded-2xl px-4 py-3 flex items-center justify-between gap-3" id="goal-current">
+                <div class="min-w-0"><div class="text-xs text-zinc-400 whitespace-nowrap">${L('현재 흡연량', 'Current')}</div>
+                    <div class="text-xl font-bold tabular-nums mt-0.5 whitespace-nowrap" data-avg="30">${L(`하루 ${gNum(st.avg30, '개비')}`, `${st.avg30}/day`)}</div>
+                    <div class="text-xs text-zinc-500 mt-0.5 whitespace-nowrap">${L(`최근 ${st.avg30Days}일 평균`, `last ${st.avg30Days}-day avg`)}</div></div>
+                <div class="text-right shrink-0"><div class="text-xs text-zinc-400 tabular-nums" data-avg="7">${L(`최근 ${st.avg7Days}일 ${st.avg7}개비`, `last ${st.avg7Days} days ${st.avg7}`)}</div>
+                    <div class="text-sm font-semibold mt-0.5"><span class="${t.c} tabular-nums"><span data-trend="${t.k}">${t.a}</span> ${t.w}</span><span class="text-zinc-400 font-normal"> · ${L(`${st.avg30Days}일 평균 대비`, `vs ${st.avg30Days}-day avg`)}</span></div></div>
+            </div>`;
+        }
+        function goalFooterHtml(st) {
+            // 기준 한 줄 (탭하면 설정 열림, 높이 44px 이상)
+            if (st.baseline == null) return '';
+            const parts = [L(`하루 ${st.baseline}개비${st.baselineAuto ? '' : '(직접)'}`, `${st.baseline}/day${st.baselineAuto ? '' : ' (manual)'}`), L(`${PRICE_PER_CIGARETTE}원/개비`, `₩${PRICE_PER_CIGARETTE}/cig`)];
+            if (st.startDate) parts.push(L(`${gdMD(st.startDate)} 시작`, `from ${gdMD(st.startDate)}`));
+            return `<button type="button" id="goal-basis" onclick="openGoalSettings()" class="mt-3 -mx-1 px-1 w-[calc(100%+0.5rem)] min-h-[44px] flex items-center justify-between gap-2 text-left text-xs text-zinc-500 rounded-xl">
+                <span class="tabular-nums">${L('기준', 'Basis')}: ${parts.join(' · ')}</span><span class="shrink-0 text-zinc-400">${L('수정', 'Edit')} ›</span></button>`;
+        }
+        function openGoalSettings() {
+            const d = document.getElementById('goal-settings'); if (!d) return;
+            d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        function goalCalcHtml(st) {
+            // 계산 기준 상세는 설정 패널 안으로 (카드 본문에서는 뺌)
+            const items = [];
+            if (st.baseline != null) {
+                const md = gdMD;
+                let src;
+                if (!st.baselineAuto) src = L('(직접 입력)', '(set manually)');
+                else if (st.baselineMode === 'pre30') src = L(`= 목표 시작 전 ${st.baselineDays}일 평균 (자동, ${md(st.baselineFrom)}~${md(st.baselineTo)})`, `= average of the ${st.baselineDays} days before the goal start (auto, ${md(st.baselineFrom)}–${md(st.baselineTo)})`);
+                else src = L(`= 기록 처음 ${st.baselineDays}일 평균 (자동, 시작 전 기록이 7일 미만이라 대신 사용, ${md(st.baselineFrom)}~${md(st.baselineTo)})`, `= average of your first ${st.baselineDays} days (auto; fewer than 7 days before the start, ${md(st.baselineFrom)}–${md(st.baselineTo)})`);
+                items.push(`<li id="goal-baseline-info">${L(`기준 ${st.baseline}개비`, `Baseline ${st.baseline}`)} ${src}</li>`);
+            }
+            if (st.startDate && st.sinceDays != null) {
+                items.push(`<li>${L(`아낀 금액 = (기준 − 그날 개비) × ${PRICE_PER_CIGARETTE}원을 목표 시작일부터 어제까지 더한 값. 오늘은 자정에 합산돼요.`, `Saved = (baseline − that day) × ₩${PRICE_PER_CIGARETTE}, summed from the start to yesterday. Today is added at midnight.`)}</li>`);
+                items.push(`<li>${L(`연속 달성 = 하루 ${st.goal}개비 이하인 날이 이어진 기간 (오늘 포함, 기록 없는 날은 0개비). 목표 시작 전 날이 들어갈 수 있어요.`, `Streak = consecutive days at or under ${st.goal} (incl. today; no-record days count as 0). May include days before the start.`)}</li>`);
+            }
+            if (st.avg30 != null) items.push(`<li>${L('현재 흡연량은 오늘을 뺀 평균. 7일 평균이 30일 평균과 0.3개비 이상 차이 나면 ↑/↓, 아니면 →.', 'Averages exclude today. ↑/↓ when the 7-day avg differs from the 30-day avg by 0.3+, otherwise →.')}</li>`);
+            if (st.goalSaveDay > 0) items.push(`<li id="goal-formula">${L(`예상 절약: 기준 ${st.baseline}개비 − 목표 ${st.goal}개비 = 하루 ${st.goalCigsPerDay}개비 × ${PRICE_PER_CIGARETTE}원 (이번 달 ${st.monthDays}일, 1년 365일)`, `Expected: baseline ${st.baseline} − goal ${st.goal} = ${st.goalCigsPerDay}/day × ₩${PRICE_PER_CIGARETTE} (this month ${st.monthDays} days, year 365)`)}</li>`);
+            if (!items.length) return '';
+            return `<div class="text-xs text-zinc-400 font-semibold mt-3 mb-1">ⓘ ${L('계산 기준', 'How it is calculated')}</div><ul class="text-xs text-zinc-500 leading-relaxed list-disc pl-4 space-y-1">${items.join('')}</ul>`;
         }
 
         function applySuggestedGoal() {
             const s = suggestGoal(records, goalLocalToday());
             if (s == null) return;
+            if (goalSettings.dailyGoal == null) goalSettings.startDate = goalLocalToday();   // 처음 목표를 정한 날 = 시작일
             goalSettings.dailyGoal = s; saveGoalSettings(); renderGoalCard(); refreshOpenReports();
         }
 
@@ -1186,9 +1341,16 @@
             const bv = b === '' ? null : Math.round(Number(b) * 10) / 10;
             if (gv != null && (!Number.isFinite(gv) || gv < 0 || gv > 200)) { alert(L('목표는 0~200 사이 숫자로 입력해 주세요.', 'Please enter a goal between 0 and 200.')); return; }
             if (bv != null && (!Number.isFinite(bv) || bv <= 0 || bv > 200)) { alert(L('기준 개비 수는 0보다 큰 숫자로 입력해 주세요.', 'Please enter a baseline greater than 0.')); return; }
-            goalSettings.dailyGoal = gv; goalSettings.baseline = bv;
+            const today = goalLocalToday();
+            const si = document.getElementById('goal-start-input');
+            let sd = si ? validDateStr(si.value.trim()) : null;
+            if (gv != null && sd && sd > today) { alert(L('목표 시작일은 오늘 이후로 정할 수 없어요.', 'The goal start date cannot be in the future.')); return; }
+            if (gv == null) sd = null;   // 목표를 지우면 시작일도 비움
+            else if (goalSettings.dailyGoal == null) sd = sd || today;   // 처음 목표를 정하면 기본값은 오늘 (입력칸 기본값도 오늘)
+            else sd = sd || goalSettings.startDate || today;
+            goalSettings.dailyGoal = gv; goalSettings.baseline = bv; goalSettings.startDate = sd;
             saveGoalSettings();
-            document.getElementById('goal-input').blur(); document.getElementById('baseline-input').blur();
+            document.getElementById('goal-input').blur(); document.getElementById('baseline-input').blur(); if (si) si.blur();
             renderGoalCard(); refreshOpenReports();
             const d = document.getElementById('goal-settings'); if (d) d.open = false;
             const fbk = document.getElementById('goal-saved'); if (fbk) { fbk.textContent = L('저장했어요 ✓', 'Saved ✓'); fbk.hidden = false; clearTimeout(fbk._t); fbk._t = setTimeout(() => { fbk.hidden = true; }, 2500); }
@@ -1539,7 +1701,7 @@
             keys.forEach(k => { res[k] = ts; });
             saveResurrect(mergeResurrect(res, {}));
             if (!v5Import) {
-                goalSettings = { dailyGoal: u.goalSettings ? u.goalSettings.dailyGoal ?? null : null, baseline: u.goalSettings ? u.goalSettings.baseline ?? null : null };
+                goalSettings = normalizeGoal(u.goalSettings || {}, localStorage.getItem(SYNC_GOAL_TS_KEY));
                 saveGoalSettings();
             }
             try { localStorage.removeItem(UNDO_KEY); } catch (e) {}
@@ -1734,8 +1896,8 @@
             hSync: ['계정 · 동기화 (선택)', 'Account · Sync (optional)'], hData: ['데이터 관리', 'Data'], hView: ['화면 설정', 'Display'],
             p30: ['30일', '30 days'], p180: ['6개월', '6 months'], p365: ['1년', '1 year'],
             goalSet: ['⚙️ 목표 · 기준 설정', '⚙️ Goal & baseline settings'], goalLbl: ['하루 목표 (개비 이하)', 'Daily goal (max per day)'],
-            baseLbl: ['절약 기준 (하루 개비)', 'Savings baseline (per day)'],
-            goalHelp: ['비워두면 목표 없음 / 기준은 첫 14일 평균으로 자동 계산돼요. 1갑 4,500원 기준.', 'Leave empty for no goal / the baseline is auto-calculated from your first 14 days. Based on ₩4,500 per pack.'],
+            baseLbl: ['절약 기준 (하루 개비)', 'Savings baseline (per day)'], startLbl: ['목표 시작일', 'Goal start date'],
+            goalHelp: ['목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균). 1갑 4,500원 기준.', 'Leave the goal empty for no goal / leave the baseline empty to use the average of the 30 days before the goal start (first 14 days if fewer than 7 days before the start). Based on ₩4,500 per pack.'],
             save: ['저장', 'Save'],
             syncDesc: ['로그인하지 않아도 모든 기능을 쓸 수 있어요. 로그인하면 여러 기기에서 기록을 함께 볼 수 있어요.', 'Every feature works without logging in. Log in to see your records on multiple devices.'],
             syncLogin: ['구글로 로그인해서 동기화', 'Sign in with Google to sync'], acct: ['계정', 'Account'], lastSync: ['마지막 동기화:', 'Last sync:'],
