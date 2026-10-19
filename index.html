@@ -37,6 +37,49 @@
     function L(ko, en) { return window.__lang === 'en' ? en : ko; }
     function LOC() { return window.__lang === 'en' ? 'en-US' : 'ko-KR'; }
     </script>
+    <script>
+    // GOATCOUNTER_V12: 익명 방문 수 · 버튼 횟수만 (기록 내용/개수/메모/이메일/사용자 ID는 절대 보내지 않음)
+    // 실제 주소(jonghun9982-crypto.github.io, 주소창에 ?쿼리 없음)에서만 count.js를 불러오고 셈. 그 외(localhost, file, Netlify, 테스트)는 스크립트 자체를 안 불러옴
+    (function () {
+        var REAL_HOST = 'jonghun9982-crypto.github.io';
+        var ok = false;
+        try { ok = location.hostname === REAL_HOST && !location.search; } catch (e) {}
+        window.__gcEnabled = ok;
+        // 이벤트: 항상 나중에(setTimeout) 실행 · 오류/차단/오프라인이어도 앱에 영향 없음
+        window.smokesCount = function (path, title) {
+            try {
+                if (!window.__gcEnabled) return;
+                setTimeout(function () {
+                    try { var gc = window.goatcounter; if (gc && typeof gc.count === 'function') gc.count({ path: path, title: title || path, referrer: '', event: true }); } catch (e) {}
+                }, 0);
+            } catch (e) {}
+        };
+        if (!ok) return;
+        try {
+            var s = document.createElement('script');
+            s.async = true;
+            s.src = '//gc.zgo.at/count.js';
+            s.setAttribute('data-goatcounter', 'https://jonghun-apps.goatcounter.com/count');
+            s.setAttribute('data-goatcounter-settings', '{"no_onload": true, "no_events": true}');   // 자동 집계 끔 → 아래에서 경로를 직접 지정
+            s.onload = function () {
+                function pv() {
+                    try {
+                        var ref = ''; try { ref = document.referrer ? new URL(document.referrer).origin : ''; } catch (e) {}
+                        if (ref === location.origin) ref = '';
+                        window.goatcounter.count({ path: '/smokes/', title: 'Smokes', referrer: ref });   // 두 앱이 한 계정을 쓰므로 경로로 앱 구분
+                    } catch (e) {}
+                }
+                function whenVisible() {
+                    if (!('visibilityState' in document) || document.visibilityState === 'visible') return pv();
+                    document.addEventListener('visibilitychange', function f() { if (document.visibilityState !== 'visible') return; document.removeEventListener('visibilitychange', f); pv(); });
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', whenVisible); else whenVisible();
+            };
+            s.onerror = function () {};   // 광고 차단/오프라인: 조용히 무시
+            document.head.appendChild(s);
+        } catch (e) {}
+    })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -69,6 +112,13 @@
         html.light .login-pending .lp-skip { background: none; color: #57534e; }
         body.typing .tabbar { display: none; }
         #undo-last-btn[hidden] { display: none !important; }
+        /* FEEDBACK_V12 */
+        html.light .bg-emerald-500\/15 { background-color: rgba(5,150,105,.12); }
+        #pv summary { list-style: none; } #pv summary::-webkit-details-marker { display: none; }
+        #pv[open] .chev { transform: rotate(180deg); }
+        #feedback-link { -webkit-tap-highlight-color: transparent; }
+        #pv, #feedback-link { word-break: keep-all; }   /* 시안과 같이 한국어 단어 단위 줄바꿈 */
+        #logout-btn.hidden + #pv { margin-top: 14px; }
         .undo-toast { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 9000; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: rgba(39,39,42,0.97); border: 1px solid #3f3f46; color: #f4f4f5; font-size: 14px; }
         .undo-toast span { flex: 1; }
         .undo-toast button { padding: 8px 14px; border-radius: 12px; background: #fff; color: #18181b; font-weight: 700; font-size: 14px; }
@@ -419,10 +469,7 @@
                 <div id="sync-logged-in" class="hidden">
                     <div class="text-sm"><span class="text-zinc-400" data-i18n="acct">계정</span> <span id="sync-email" class="font-semibold break-all"></span></div>
                     <div class="text-xs text-zinc-400 mt-1"><span data-i18n="lastSync">마지막 동기화:</span> <span id="sync-last">아직 없음</span></div>
-                    <div class="grid grid-cols-2 gap-2 mt-3">
-                        <button type="button" onclick="CloudSync.syncNow()" class="py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-sm font-semibold" data-i18n="syncNow">지금 동기화</button>
-                        <button type="button" onclick="CloudSync.logout()" class="py-3 rounded-2xl bg-zinc-700 hover:bg-zinc-600 text-sm" data-i18n="logout">로그아웃</button>
-                    </div>
+                    <button type="button" onclick="CloudSync.syncNow()" class="mt-3 w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold" data-i18n="syncNow">지금 동기화</button>
                 </div>
                 <p id="sync-status" class="text-xs mt-3 text-zinc-400" aria-live="polite"></p>
             </div>
@@ -438,6 +485,21 @@
                 <button onclick="resetAllData()" class="py-3 rounded-2xl bg-zinc-700 hover:bg-red-900/40 text-red-400 text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-trash"></i> <span data-i18n="delAll">전체 삭제</span></button>
                 <button type="button" id="undo-last-btn" onclick="undoLastAction()" hidden class="col-span-2 py-3 rounded-2xl bg-zinc-700 hover:bg-zinc-600 text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-rotate-left"></i> <span>마지막 작업 되돌리기</span></button>
             </div>
+        </div>
+
+        <!-- FEEDBACK_V12: 의견 보내기 · 로그아웃 · 개인정보 안내 (앱 UI 디자인 팀 시안 /workspace/feedback-design/smokes.html) -->
+        <div data-tab="acc" class="px-6 mt-5">
+            <a id="feedback-link" href="#" target="_blank" rel="noopener" onclick="return openFeedback(event)"
+               class="flex items-center gap-3 min-h-[60px] px-4 py-2.5 bg-zinc-800 rounded-3xl text-white no-underline">
+                <span class="w-9 h-9 shrink-0 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12z"/></svg></span>
+                <span class="flex-1 min-w-0"><b class="block text-[15px] font-bold" data-i18n="fbTitle">의견 보내기</b><small class="block text-[13px] text-zinc-400 mt-0.5" data-i18n="fbSub">불편한 점이나 아이디어를 알려 주세요</small></span>
+                <span id="feedback-ext" class="w-[18px] h-[18px] shrink-0 text-emerald-400" aria-label="새 탭에서 열림"><svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></span>
+            </a>
+            <button type="button" id="logout-btn" onclick="CloudSync.logout()" class="hidden block mx-auto mt-3.5 min-h-[44px] px-4 text-[15px] font-semibold text-red-400" data-i18n="logout">로그아웃</button>
+            <details class="mx-2 mt-1.5 text-xs leading-relaxed text-zinc-500 text-center" id="pv">
+                <summary class="cursor-pointer"><span data-i18n="pvShort">기록은 내 기기에 먼저 저장되고, 로그인하면 내 계정에만 백업돼요. 앱 개선을 위해 방문 수와 버튼 누른 횟수만 익명으로 세고, 기록 내용은 모으지 않아요.</span><span class="ml-1 font-bold text-emerald-400 whitespace-nowrap"><span data-i18n="pvMore">자세히</span> <span class="chev inline-block">▾</span></span></summary>
+                <div class="text-left mt-2 p-3.5 rounded-2xl bg-zinc-800 space-y-1.5"><p data-i18n-html="pv1">기록은 먼저 <b>이 기기 안에만</b> 저장돼요. Google로 로그인하면 같은 기록이 <b>내 계정 공간에만</b> 백업되고, 다른 사용자는 볼 수 없어요.</p><p data-i18n-html="pv2">앱을 고치는 데 참고하려고 <b>GoatCounter</b>로 방문 수와 버튼을 누른 횟수만 익명으로 세요. GoatCounter는 쿠키나 광고 추적을 쓰지 않아요 (로그인하면 Google 로그인 정보만 저장돼요). 흡연 기록 내용은 모으지 않아요.</p><p data-i18n-html="pv3">의견은 Google 폼으로 받아 <b>앱 개선에만</b> 쓰고, 다른 곳에 공유하지 않아요.</p></div>
+            </details>
         </div>
 
     </div>
@@ -467,6 +529,8 @@
     </script>
 
     <script>
+        // 의견 보내기 Google 폼 주소. 비우면('') 버튼을 눌렀을 때 '준비 중' 안내만 보여줌
+        const FEEDBACK_FORM_URL = 'https://forms.gle/1e6APyTsEorW4AQL7';
         let records = [];
         let predictionChartInstance = null;
         let dailyChartInstance = null;
@@ -510,10 +574,25 @@
             renderAll();
         }
 
+        function feedbackUrlOk() { return /^https:\/\/\S+$/.test(FEEDBACK_FORM_URL); }
+        function initFeedbackLink() {
+            const a = document.getElementById('feedback-link'); if (!a) return;
+            if (feedbackUrlOk()) a.href = FEEDBACK_FORM_URL; else a.setAttribute('href', '#');
+            const ext = document.getElementById('feedback-ext'); if (ext) ext.setAttribute('aria-label', L('새 탭에서 열림', 'Opens in a new tab'));
+        }
+        function openFeedback(e) {
+            if (window.smokesCount) window.smokesCount('smokes-feedback', '의견 보내기');
+            if (feedbackUrlOk()) return true;   // <a target=_blank rel=noopener> 기본 동작으로 새 탭 열기
+            if (e) e.preventDefault();
+            showToast(L('의견 폼을 준비 중이에요', 'The feedback form is coming soon'));
+            return false;
+        }
+
         function quickLog() {
             const now = new Date();
             const localDatetime = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}T${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:00`;
             addRecord(1, localDatetime);
+            if (window.smokesCount) window.smokesCount('smokes-plus1', '+1 기록');   // 기록을 먼저 저장한 뒤, 횟수만 비동기로
         }
 
         function manualLogWithDate() {
@@ -1792,6 +1871,7 @@
         function exportToCSV() {
             if (records.length === 0) return alert(L('데이터가 없습니다.', 'No data.'));
             downloadCSV(buildCSV(records), `흡연기록_${new Date().toISOString().slice(0,10)}.csv`);
+            if (window.smokesCount) window.smokesCount('smokes-backup', 'CSV 내보내기');
         }
 
         // ===== UNDO_BACKUP_V6: 샘플 데이터 / 전체 삭제 전 자동 백업 + 되돌리기 =====
@@ -2055,6 +2135,12 @@
             baseLbl: ['절약 기준 (하루 개비)', 'Savings baseline (per day)'], startLbl: ['목표 시작일', 'Goal start date'],
             goalHelp: ['목표를 비워두면 목표 없음 / 기준을 비워두면 목표 시작 전 30일 평균으로 자동 계산돼요 (시작 전 기록이 7일 미만이면 처음 14일 평균).', 'Leave the goal empty for no goal / leave the baseline empty to use the average of the 30 days before the goal start (first 14 days if fewer than 7 days before the start).'],
             save: ['저장', 'Save'], cancel: ['취소', 'Cancel'],
+            fbTitle: ['의견 보내기', 'Send feedback'], fbSub: ['불편한 점이나 아이디어를 알려 주세요', 'Tell us what bothers you or share an idea'],
+            pvShort: ['기록은 내 기기에 먼저 저장되고, 로그인하면 내 계정에만 백업돼요. 앱 개선을 위해 방문 수와 버튼 누른 횟수만 익명으로 세고, 기록 내용은 모으지 않아요.', 'Records are saved on your device first and, if you log in, backed up only to your account. To improve the app we anonymously count only visits and button taps, and never collect your records.'],
+            pvMore: ['자세히', 'More'],
+            pv1: ['기록은 먼저 <b>이 기기 안에만</b> 저장돼요. Google로 로그인하면 같은 기록이 <b>내 계정 공간에만</b> 백업되고, 다른 사용자는 볼 수 없어요.', 'Records are first saved <b>only on this device</b>. If you log in with Google, the same records are backed up <b>only to your own account space</b>, and other users can\'t see them.'],
+            pv2: ['앱을 고치는 데 참고하려고 <b>GoatCounter</b>로 방문 수와 버튼을 누른 횟수만 익명으로 세요. GoatCounter는 쿠키나 광고 추적을 쓰지 않아요 (로그인하면 Google 로그인 정보만 저장돼요). 흡연 기록 내용은 모으지 않아요.', 'To help improve the app, we use <b>GoatCounter</b> to anonymously count only visits and button taps. GoatCounter uses no cookies or ad tracking (if you log in, only your Google login info is stored). Your smoking records are never collected.'],
+            pv3: ['의견은 Google 폼으로 받아 <b>앱 개선에만</b> 쓰고, 다른 곳에 공유하지 않아요.', 'Feedback is collected with Google Forms, used <b>only to improve the app</b>, and never shared elsewhere.'],
             packLbl: ['1갑 가격', 'Pack price'], packEdit: ['변경 ›', 'Edit ›'], packInLbl: ['1갑 가격 (20개비, 원)', 'Price per pack (20 cigarettes, KRW)'],
             packHelp: ['1,000~50,000원. 지출·절약 금액 계산에 쓰여요.', '₩1,000–50,000. Used for spending and savings amounts.'],
             syncDesc: ['로그인하지 않아도 모든 기능을 쓸 수 있어요. 로그인하면 여러 기기에서 기록을 함께 볼 수 있어요.', 'Every feature works without logging in. Log in to see your records on multiple devices.'],
@@ -2073,6 +2159,8 @@
                 if (I18N[k]) el.textContent = I18N[k][i];
             });
             document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.getAttribute('data-i18n-ph'); if (I18N[k]) el.placeholder = I18N[k][i]; });
+            document.querySelectorAll('[data-i18n-html]').forEach(el => { const k = el.getAttribute('data-i18n-html'); if (I18N[k]) el.innerHTML = I18N[k][i]; });   // 고정 문구만 (사용자 입력 X)
+            if (typeof initFeedbackLink === 'function') initFeedbackLink();
             updateHdrBtns();
         }
         const CHART_DARK_DEFAULTS = window.Chart ? { color: Chart.defaults.color, borderColor: Chart.defaults.borderColor } : {};
@@ -2243,6 +2331,7 @@
             const out = $('sync-logged-out'), inn = $('sync-logged-in');
             if (!out || !inn) return;
             out.classList.toggle('hidden', !!user); inn.classList.toggle('hidden', !user);
+            const lo = $('logout-btn'); if (lo) lo.classList.toggle('hidden', !user);
             if (user) {
                 $('sync-email').textContent = user.email || L('(이메일 없음)', '(no email)');
                 const t = Number(localStorage.getItem(LAST_SYNC_KEY) || 0);
@@ -2371,6 +2460,7 @@
             const { authM, auth } = fb;
             const provider = new authM.GoogleAuthProvider();
             provider.setCustomParameters({ prompt: 'select_account' });
+            if (window.smokesCount) window.smokesCount('smokes-login', 'Google 로그인');   // 로그인 시도 횟수만 (계정 정보 X)
             authM.signInWithPopup(auth, provider).then(() => { ensureWatch(); }).catch(e => {
                 const c = (e && e.code) || '';
                 if (c.includes('operation-not-supported-in-environment')) {
