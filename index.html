@@ -1064,6 +1064,7 @@
         const SYNC_BACKUP_KEY = 'smokingRecordsBackupBeforeSync';
         const SYNC_GOAL_TS_KEY = 'smokingGoalUpdatedAt';
         const SYNC_TOMB_MAX = 5000;
+        const IMPORT_REPLACE_KEY = 'smokingImportReplacePending';   // V13: CSV 교체 후 다음 동기화에서 클라우드를 불러온 기록과 같게
 
         function syncRecordKey(r) {
             if (!r) return '';
@@ -1082,9 +1083,24 @@
                 map.set(k, r);
             };
             (localRecs || []).forEach(add);   // 로컬 우선 (같은 키면 로컬 내용 유지)
-            (cloudRecs || []).forEach(add);
+            // V13_CONTENT_PAIR: id만 다르고 내용(시각+개수+메모)이 같은 기록은 한쪽씩 짝지어 하나로 (로컬 id 유지)
+            // 양쪽에 같은 수만큼 있는 같은 분 기록은 그대로, 짝이 없는 나머지도 그대로 유지
+            const cloudKeys = new Set((cloudRecs || []).filter(r => r && typeof r === 'object' && r.datetime).map(syncRecordKey));
+            const spare = new Map();   // 내용키 → 클라우드에 같은 id가 없는 로컬 기록 수
+            map.forEach((r, k) => { if (cloudKeys.has(k)) return; const c = syncContentKey(r); spare.set(c, (spare.get(c) || 0) + 1); });
+            const dupKeys = [];
+            (cloudRecs || []).forEach(r => {
+                if (!r || typeof r !== 'object' || !r.datetime) return;
+                const k = syncRecordKey(r);
+                if (dead.has(k) || map.has(k)) return;
+                const c = syncContentKey(r), n = spare.get(c) || 0;
+                if (n > 0) { spare.set(c, n - 1); dupKeys.push(k); return; }   // 로컬 기록과 같은 것 → 버리고 삭제 표시
+                map.set(k, r);
+            });
+            mergeRecordSets.lastDupKeys = dupKeys;
             return Array.from(map.values()).sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
         }
+        function syncContentKey(r) { return `${r.datetime}|${Number(r.count) || 0}|${r.note || ''}`; }
 
         function mergeTombstones(a, b) {
             const out = Array.from(new Set([...(a || []), ...(b || [])]));
@@ -1135,7 +1151,7 @@
             getTombstones: loadTombstones,
             getResurrect: loadResurrect, setResurrect: saveResurrect, mergeResurrect, applyResurrect,
             setTombstones: (t) => { try { localStorage.setItem(SYNC_TOMB_KEY, JSON.stringify(t)); } catch (e) {} },
-            merge: mergeRecordSets, mergeTombstones, mergeGoal, chunkRecordsJson,
+            merge: mergeRecordSets, recordKey: syncRecordKey, mergeTombstones, mergeGoal, chunkRecordsJson,
             backup: () => {
                 try { localStorage.setItem(SYNC_BACKUP_KEY, JSON.stringify({ savedAt: new Date().toISOString(), records, goal: goalSettings })); return true; }
                 catch (e) { return false; }
@@ -1940,7 +1956,7 @@
                 goalSettings = normalizeGoal(u.goalSettings || {}, localStorage.getItem(SYNC_GOAL_TS_KEY));
                 saveGoalSettings();
             }
-            try { localStorage.removeItem(UNDO_KEY); } catch (e) {}
+            try { localStorage.removeItem(UNDO_KEY); localStorage.removeItem(IMPORT_REPLACE_KEY); } catch (e) {}
             saveData();   // 로그인 상태면 동기화 예약
             renderAll();
             hideUndoToast();
@@ -2049,6 +2065,7 @@
                     if (!autoBackup('import', { extra: { mode: 'replace', importedIds: parsed.map(r => r.id) } })) return;
                     // 기존 기록은 삭제 표시 (전체 삭제와 같은 방식) → 클라우드/다른 기기의 예전 기록이 다시 합쳐지지 않게
                     addTombstones(records);
+                    try { localStorage.setItem(IMPORT_REPLACE_KEY, String(Date.now())); } catch (e) {}
                     records = parsed;
                     saveData();
                     renderAll();
@@ -2386,11 +2403,21 @@
                 if (!A.backup()) console.warn('백업 저장 실패(용량 부족 가능)');
                 const res = A.mergeResurrect(A.getResurrect(), cloud.resurrect);   // 되돌리기로 살린 기록은 삭제 표시에서 제외
                 A.setResurrect(res);
-                const tombs = A.applyResurrect(A.mergeTombstones(A.getTombstones(), cloud.tombstones), res);
+                let tombs = A.applyResurrect(A.mergeTombstones(A.getTombstones(), cloud.tombstones), res);
+                // V13_IMPORT_AUTH: CSV로 통째로 바꾼 뒤 첫 동기화 → 클라우드에만 있는 기록은 모두 삭제 표시 (클라우드 = 불러온 기록)
+                const importPending = localStorage.getItem(IMPORT_REPLACE_KEY);
+                if (importPending) {
+                    const localKeys = new Set(A.getRecords().map(r => A.recordKey(r)));
+                    const extra = (cloud.records || []).filter(r => r && r.datetime).map(r => A.recordKey(r)).filter(k => !localKeys.has(k) && !(Number(res[k]) > 0));
+                    tombs = A.mergeTombstones(tombs, extra);
+                }
                 const merged = A.merge(A.getRecords(), cloud.records, tombs);
+                const dupKeys = A.merge.lastDupKeys || [];
+                if (dupKeys.length) tombs = A.mergeTombstones(tombs, dupKeys);   // V13: 다른 기기에서도 중복 id가 빠지도록
                 const g = A.mergeGoal(A.getGoal(), A.getGoalTs(), cloud.goal, cloud.goalTs);
                 await writeCloud(user.uid, merged, tombs, g.goal, g.ts, cloud.chunkCount);
                 A.setTombstones(tombs);
+                if (importPending) localStorage.removeItem(IMPORT_REPLACE_KEY);
                 const before = A.getRecords().length;
                 // 동기화 도중 추가된 로컬 기록을 잃지 않도록 현재 로컬과 한 번 더 합침
                 const finalRecs = A.merge(A.getRecords(), merged, tombs);
