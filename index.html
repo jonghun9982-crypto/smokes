@@ -1428,16 +1428,20 @@
             const RED = 'text-red-500';   // #ef4444
             const bars = days.map((d, i) => {
                 const bx = (i * slot + (slot - bw) / 2).toFixed(2);
-                if (d.won === 0) return `<rect x="${bx}" y="${(y0 - 1).toFixed(2)}" width="${bw.toFixed(2)}" height="2" fill="currentColor" class="text-zinc-500" data-day="0"/>`;
+                if (d.won === 0) return `<rect x="${bx}" y="${(y0 - 1).toFixed(2)}" width="${bw.toFixed(2)}" height="2" fill="currentColor" class="text-zinc-500" data-day="0" data-i="${i}"/>`;
                 const over = d.won < 0, h = Math.max(1.5, Math.abs(y(-d.won) - y0));   // 더 쓴 날 = 위
-                return `<rect x="${bx}" y="${(over ? y0 - h : y0).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" fill="currentColor" class="${over ? RED : 'text-emerald-400'}" data-day="${over ? 'over' : 'saved'}"><title>${gdMD(d.date)} ${over ? L(`${wonText(-d.won)} 더 씀`, `${wonText(-d.won)} over`) : L(`${wonText(d.won)} 아낌`, `${wonText(d.won)} saved`)}</title></rect>`;
+                return `<rect x="${bx}" y="${(over ? y0 - h : y0).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}" fill="currentColor" class="${over ? RED : 'text-emerald-400'}" data-day="${over ? 'over' : 'saved'}" data-i="${i}"><title>${gdMD(d.date)} ${over ? L(`${wonText(-d.won)} 더 씀`, `${wonText(-d.won)} over`) : L(`${wonText(d.won)} 아낌`, `${wonText(d.won)} saved`)}</title></rect>`;
             }).join('');
             const sw = 'inline-block w-2 h-2 rounded-sm align-middle mr-1';
-            return `<div class="mt-3" id="goal-chart">
+            // TAP_T1: 하루 막대 누르면 그날 정보 (표시 전용 · 같은 계산값 사용: 개수 = st.series, 금액 = 누적 차이)
+            const span0 = pts.length ? st.series.filter(d => d.date >= st.startDate && d.date < todayStr) : [];
+            window.__goalBarDays = days.map((d, i) => ({ date: d.date, count: span0[i].count, won: d.won, cum: pts[i].won, goal: st.goal, baseline: st.baseline }));
+            const hits = days.map((d, i) => `<button type="button" data-gbar="${i}" class="flex-1 h-full p-0 m-0 bg-transparent border-0 outline-none" style="-webkit-tap-highlight-color:transparent;touch-action:manipulation" aria-label="${gdMD(d.date)}"></button>`).join('');
+            return `<div class="mt-3" id="goal-chart"><div class="relative" id="goal-bars">
                 <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block w-full h-[80px]" role="img" aria-label="${L(`하루별 막대. 빨강 위로 = 더 피운 날, 초록 아래로 = 덜 피운 날. 누적 ${wonText(last.won)}`, `Daily bars. Red up = smoked more, green down = smoked less. Total ${wonText(last.won)}`)}">
                     ${bars}
                     <line x1="0" x2="${W}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="currentColor" class="text-zinc-500" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
-                </svg>
+                </svg><div class="absolute inset-0 flex" id="goal-bar-hits">${hits}</div></div>
                 <div class="flex justify-between text-[11px] text-zinc-500 tabular-nums mt-1 leading-tight">
                     <div><div>${gdMD(st.startDate)} ${L('시작', 'start')}</div><div class="text-zinc-500" data-chart="start">${window.__lang === 'en' ? wonText(0) : '0원'}</div></div>
                     <div class="text-right"><div>${L('어제', 'yesterday')}</div><div class="font-semibold ${last.won > 0 ? 'text-emerald-400' : last.won < 0 ? 'text-zinc-300' : 'text-zinc-500'}" data-chart="end">${window.__lang === 'en' ? wonText(Math.abs(last.won)) : Math.abs(last.won).toLocaleString() + '원'}</div></div>
@@ -1445,6 +1449,60 @@
                 <div class="mt-2 text-[11px] text-zinc-400 leading-tight" id="goal-chart-legend" style="word-break:keep-all"><span class="whitespace-nowrap"><span class="${sw} bg-red-500"></span>${L('빨강 = 더 피운 날', 'red = smoked more')}</span><span class="text-zinc-600 mx-1.5">/</span><span class="whitespace-nowrap"><span class="${sw} bg-emerald-400"></span>${L('초록 = 덜 피운 날', 'green = smoked less')}</span></div>
             </div>`;
         }
+        function goalBarPopClose() {
+            const p = document.getElementById('goal-pop'); if (p) p.remove();
+            document.querySelectorAll('#goal-bars rect[data-i]').forEach(r => r.style.opacity = '');
+            window.__goalBarSel = null;
+        }
+        function goalBarPopOpen(i) {
+            goalBarPopClose();
+            const d = (window.__goalBarDays || [])[i], wrap = document.getElementById('goal-bars'), hit = wrap && wrap.querySelector(`[data-gbar="${i}"]`);
+            if (!d || !hit) return;
+            window.__goalBarSel = i;
+            wrap.querySelectorAll('rect[data-i]').forEach(r => r.style.opacity = r.dataset.i === String(i) ? '1' : '0.3');
+            const en = window.__lang === 'en';
+            const wd = new Date(d.date + 'T00:00:00Z').getUTCDay();
+            const wdT = en ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][wd] : '일월화수목금토'[wd];
+            const amt = v => en ? `₩${Math.abs(v).toLocaleString()}` : `${Math.abs(v).toLocaleString()}원`;
+            const G = '#34d399', T = '#f4f4f5', M = '#a1a1aa';
+            const met = d.goal != null && d.count <= d.goal;
+            const lines = [];
+            lines.push(`<div style="color:${T};font-weight:700" data-pop="date">${gdMD(d.date)} (${wdT})</div>`);
+            lines.push(`<div style="color:${T}" data-pop="count">${en ? `Smoked: ${d.count} / baseline ${d.baseline}` : `피운 개비: ${d.count}개비 / 기준 ${d.baseline}개비`}</div>`);
+            lines.push(d.won > 0 ? `<div style="color:${G};font-weight:600" data-pop="won">${en ? `Saved ${amt(d.won)}` : `아낀 금액 ${amt(d.won)}`}</div>`
+                     : d.won < 0 ? `<div style="color:${T};font-weight:600" data-pop="won">${en ? `Spent ${amt(d.won)} more` : `더 쓴 금액 ${amt(d.won)}`}</div>`
+                     : `<div style="color:${M}" data-pop="won">${en ? 'Same as baseline (₩0)' : '기준과 같아요 (0원)'}</div>`);
+            if (d.goal != null) {
+                const g = d.goal !== d.baseline ? (en ? `Goal ${d.goal}` : `목표 ${d.goal}개비`) : (en ? 'Goal' : '목표');
+                lines.push(met ? `<div style="color:${G}" data-pop="goal">${en ? `${g} · met ✓` : `${g} · 달성 ✓`}</div>` : `<div style="color:${M}" data-pop="goal">${en ? `${g} · not met` : `${g} · 미달성`}</div>`);
+            }
+            lines.push(`<div style="color:${M};margin-top:2px" data-pop="cum">${d.cum > 0 ? (en ? `Total so far: saved ${amt(d.cum)}` : `이날까지 누적 ${amt(d.cum)} 아낌`) : d.cum < 0 ? (en ? `Total so far: ${amt(d.cum)} more` : `이날까지 누적 ${amt(d.cum)} 더 씀`) : (en ? 'Total so far: ₩0' : '이날까지 누적 0원')}</div>`);
+            const p = document.createElement('div');
+            p.id = 'goal-pop'; p.setAttribute('role', 'status');
+            p.style.cssText = 'position:absolute;z-index:30;left:0;bottom:calc(100% + 8px);width:max-content;max-width:min(240px,100%);padding:8px 11px;border-radius:12px;background:#18181b;border:1px solid #3f3f46;box-shadow:0 6px 18px rgba(0,0,0,.35);font-size:12px;line-height:1.45;word-break:keep-all;pointer-events:auto';
+            p.innerHTML = lines.join('') + '<div data-pop="arrow" style="position:absolute;width:10px;height:10px;background:#18181b;transform:rotate(45deg)"></div>';
+            wrap.appendChild(p);
+            // 가로: 막대 가운데 기준, 그래프(카드 안쪽) 폭 안으로 고정
+            const W = wrap.clientWidth, pw = p.offsetWidth, hr = hit.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+            const cx = hr.left - wr.left + hr.width / 2;
+            const left = Math.max(0, Math.min(W - pw, cx - pw / 2));
+            p.style.left = left + 'px';
+            const ar = p.querySelector('[data-pop="arrow"]');
+            ar.style.left = (Math.max(10, Math.min(pw - 20, cx - left - 5))) + 'px';
+            // 세로: 기본은 막대 위. 카드 위로 넘치면 막대 아래로
+            const card = wrap.closest('.rounded-3xl'), cr = card ? card.getBoundingClientRect() : { top: 0 };
+            if (p.getBoundingClientRect().top < Math.max(cr.top, 0) + 4) {
+                p.style.bottom = ''; p.style.top = 'calc(100% + 8px)';
+                ar.style.top = '-6px'; ar.style.borderLeft = ar.style.borderTop = '1px solid #3f3f46';
+            } else { ar.style.bottom = '-6px'; ar.style.borderRight = ar.style.borderBottom = '1px solid #3f3f46'; }
+        }
+        document.addEventListener('click', e => {
+            const t = e.target instanceof Element ? e.target : null;
+            const b = t && t.closest('[data-gbar]');
+            if (b) { const i = +b.dataset.gbar; if (window.__goalBarSel === i && document.getElementById('goal-pop')) goalBarPopClose(); else goalBarPopOpen(i); return; }
+            if (t && t.closest('#goal-pop')) return;
+            if (window.__goalBarSel != null || document.getElementById('goal-pop')) goalBarPopClose();
+        });
         function goalHeroHtml(st, todayStr) {
             if (!st.startDate) return '';
             // 맨 위: 작은 배지 2개 + 누적 절약 문장(카드에서 가장 큰 글자)
