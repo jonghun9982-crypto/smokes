@@ -325,14 +325,10 @@
             </div>
         </div>
 
-        <!-- P1: 예측 기간 · 아래 일별·월별 차트에만 반영 (시간대별은 그대로) -->
-        <div data-tab="ana" class="px-6 mb-5" id="forecast-period-wrap">
-            <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hForecast">예측 기간</h3>
-            <div id="prediction-period" class="grid grid-cols-3 gap-2 bg-zinc-900 p-1 rounded-2xl" role="tablist">
-                <button type="button" data-days="30" onclick="setPredictionPeriod(30)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p30">30일</button>
-                <button type="button" data-days="180" onclick="setPredictionPeriod(180)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p180">6개월</button>
-                <button type="button" data-days="365" onclick="setPredictionPeriod(365)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p365">1년</button>
-            </div>
+        <!-- P3: 예측은 기본 숨김. 예측 보기 버튼으로 30일 예측만 켜고 끔 (기간 선택은 제거) -->
+        <div data-tab="ana" class="px-6 mb-5" id="forecast-toggle-wrap">
+            <button type="button" id="forecast-toggle-btn" onclick="toggleForecast()" class="w-full min-h-[44px] py-3 rounded-2xl bg-zinc-800 border border-zinc-700 text-sm font-semibold text-zinc-200" style="-webkit-tap-highlight-color:transparent;word-break:keep-all" aria-pressed="false">예측 보기</button>
+            <p id="forecast-toggle-note" class="hidden text-sm text-zinc-500 text-center px-1 leading-snug" style="word-break:keep-all"></p>
         </div>
 
         <!-- 일별 추이 -->
@@ -342,7 +338,7 @@
                 <div class="chart-container h-[200px]">
                     <canvas id="daily-trend-chart"></canvas>
                 </div>
-                <div id="daily-forecast-note" class="mt-3 text-sm text-zinc-400 leading-snug" style="word-break:keep-all"></div>
+                <div id="daily-forecast-note" class="hidden mt-3 text-sm text-zinc-400 leading-snug" style="word-break:keep-all"></div>
                 <div class="report-wrap">
                     <button type="button" class="report-btn" onclick="toggleReport('daily', this)" aria-expanded="false" aria-controls="report-daily"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-daily" class="report-box hidden"></div>
@@ -350,7 +346,7 @@
             </div>
         </div>
 
-        <div data-tab="ana" class="px-6 mb-6" id="forecast-insight-wrap">
+        <div data-tab="ana" class="hidden px-6 mb-6" id="forecast-insight-wrap">
             <div id="prediction-insight" class="text-sm text-zinc-300 bg-zinc-800 rounded-3xl p-4 leading-snug" style="word-break:keep-all"></div>
             <div class="report-wrap px-1">
                 <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
@@ -363,7 +359,7 @@
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hCost">월별 담배 지출</h3>
             <div class="bg-zinc-800 rounded-3xl p-5">
                 <div id="monthly-cost-summary" class="mb-4 text-center"></div>
-                <div id="monthly-cost-forecast" class="mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
+                <div id="monthly-cost-forecast" class="hidden mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
                 <div class="chart-container h-[200px]">
                     <canvas id="monthly-cost-chart"></canvas>
                 </div>
@@ -379,7 +375,7 @@
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hCount">월별 총 흡연 갯수</h3>
             <div class="bg-zinc-800 rounded-3xl p-5">
                 <div id="monthly-count-summary" class="mb-4 text-center"></div>
-                <div id="monthly-count-forecast" class="mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
+                <div id="monthly-count-forecast" class="hidden mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
                 <div class="chart-container h-[200px]">
                     <canvas id="monthly-count-chart"></canvas>
                 </div>
@@ -650,6 +646,7 @@
             renderDailyTrendChart();
             renderMonthlyCostChart();
             renderMonthlyCountChart();
+            updateForecastToggle();
             fillForecastInsight();
             refreshOpenReports();
         }
@@ -708,10 +705,47 @@
         // P1: 예측은 분석의 일별·월별 차트에만 (시간대별은 그대로). 계산은 기존 calculateForecast / calculateLongForecast 그대로
         const FC_MUTE_BG = 'rgba(161, 161, 170, 0.28)';
         const FC_MUTE_BD = 'rgba(161, 161, 170, 0.95)';
+        let forecastOpen = false;  // P3: 예측 표시 여부. 저장하지 않음 — 매번 현황부터 시작
+        function forecastOn() { return forecastOpen && getDailyTotals().length >= 7; }
         function getForecastDays() {
             const dailyData = getDailyTotals();
             if (dailyData.length < 7) return [];
-            return predictionDays <= 30 ? calculateForecast(dailyData, predictionDays) : calculateLongForecast(dailyData, predictionDays);
+            return calculateForecast(dailyData, 30);
+        }
+        function updateForecastToggle() {
+            const enough = getDailyTotals().length >= 7;
+            const btn = document.getElementById('forecast-toggle-btn');
+            const note = document.getElementById('forecast-toggle-note');
+            if (btn) {
+                btn.classList.toggle('hidden', !enough);
+                btn.textContent = forecastOpen ? L('예측 숨기기', 'Hide forecast') : L('예측 보기', 'Show forecast');
+                btn.setAttribute('aria-pressed', forecastOn() ? 'true' : 'false');
+                btn.classList.toggle('bg-zinc-700', forecastOn());
+                btn.classList.toggle('border-zinc-500', forecastOn());
+            }
+            if (note) {
+                note.classList.toggle('hidden', enough);
+                note.textContent = enough ? '' : L('예측은 7일 이상 기록이 필요해요.', 'Forecast needs 7+ days of records.');
+            }
+            const on = forecastOn();
+            const insight = document.getElementById('forecast-insight-wrap');
+            if (insight) insight.classList.toggle('hidden', !on);
+            ['daily-forecast-note', 'monthly-cost-forecast', 'monthly-count-forecast'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !on);
+            });
+        }
+        function toggleForecast() {
+            if (getDailyTotals().length < 7) return;
+            forecastOpen = !forecastOpen;
+            applyForecastView();
+        }
+        function applyForecastView() {
+            updateForecastToggle();
+            renderDailyTrendChart();
+            renderMonthlyCostChart();
+            renderMonthlyCountChart();
+            fillForecastInsight();
+            refreshOpenReports();
         }
         function forecastMonthSums(preds) {
             const m = {};
@@ -725,7 +759,7 @@
             const daily = getDailyTotals().slice(-30);
             if (daily.length === 0) { setNote('daily-forecast-note', ''); return; }
 
-            const preds = getForecastDays();
+            const preds = forecastOn() ? getForecastDays() : [];
             const showN = Math.min(10, preds.length);
             const fut = preds.slice(0, showN);
             const labels = daily.map(d => d.date.slice(5)).concat(fut.map(d => d.date.slice(5)));
@@ -733,12 +767,7 @@
             const forecast = daily.map(() => null).concat(fut.map(d => d.count));
             const line = daily.map((d, i) => i === daily.length - 1 ? d.count : null).concat(fut.map(d => d.count));
 
-            const ctx = document.getElementById('daily-trend-chart');
-            dailyChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
+            const datasets = [{
                         label: L('일별 흡연량', 'Daily count'),
                         data: actual,
                         backgroundColor: 'rgba(96, 165, 250, 0.75)',
@@ -747,7 +776,9 @@
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
                         maxBarThickness: 18,
                         order: 2
-                    }, {
+                    }];
+            if (fut.length) {
+                datasets.push({
                         label: L('예측', 'Forecast'),
                         data: forecast,
                         backgroundColor: FC_MUTE_BG,
@@ -771,7 +802,14 @@
                         tension: 0,
                         fill: false,
                         order: 1
-                    }]
+                    });
+            }
+            const ctx = document.getElementById('daily-trend-chart');
+            dailyChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets
                 },
                 options: {
                     responsive: true,
@@ -781,7 +819,7 @@
                     scales: { y: { beginAtZero: true, grid: { color: gridColor() } } }
                 }
             });
-            setNote('daily-forecast-note', dailyForecastNoteHtml(preds));
+            setNote('daily-forecast-note', forecastOn() ? dailyForecastNoteHtml(preds) : '');
         }
 
         function dailyForecastNoteHtml(preds) {
@@ -807,7 +845,7 @@
             const week = futureN
                 ? L(`이번 주 예상 ${weekTot}개비 (지금까지 ${Math.round(actual)} · 남은 ${futureN}일 ${Math.round(future)})`, `This week expected ${weekTot} (so far ${Math.round(actual)} · ${futureN} days left ${Math.round(future)})`)
                 : L(`이번 주 예상 ${weekTot}개비`, `This week expected ${weekTot}`);
-            const fwd = L(`앞으로 ${periodLabel(predictionDays)} 예상 ${periodTot.toLocaleString()}개비 · ${wonText(periodCost)}`, `Next ${periodLabel(predictionDays)}: ${periodTot.toLocaleString()} · ${wonText(periodCost)}`);
+            const fwd = L(`앞으로 30일 예상 ${periodTot.toLocaleString()}개비 · ${wonText(periodCost)}`, `Next 30 days: ${periodTot.toLocaleString()} · ${wonText(periodCost)}`);
             return `<div class="text-zinc-300 font-medium">${week}</div><div class="mt-0.5">${fwd}</div><div class="mt-1 text-[11px] text-zinc-500">${legend}</div>`;
         }
 
@@ -872,22 +910,20 @@
                 <div class="text-4xl font-bold text-white mt-1">${wonText(currentMonthCost)}</div>
             `;
 
-            const costFc = attachMonthForecast(sortedMonths, labels, costs, currentMonth, monthlyMap, 'cost');
-
-            const ctx = document.getElementById('monthly-cost-chart');
-            monthlyCostChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: costFc.labels,
-                    datasets: [{
+            const showFc = forecastOn();
+            const costFc = showFc ? attachMonthForecast(sortedMonths, labels, costs, currentMonth, monthlyMap, 'cost') : null;
+            const costLabels = showFc ? costFc.labels : labels;
+            const costActual = showFc ? costFc.actual : costs;
+            const costSets = [{
                         label: L('지출 (원)', 'Spending (KRW)'),
-                        data: costFc.actual,
+                        data: costActual,
                         backgroundColor: '#f87171',
                         borderColor: '#ef4444',
                         borderWidth: 1,
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
-                        stack: 's'
-                    }, {
+                        stack: showFc ? 's' : undefined
+                    }];
+            if (showFc) costSets.push({
                         label: L('예측', 'Forecast'),
                         data: costFc.forecast,
                         backgroundColor: FC_MUTE_BG,
@@ -896,19 +932,23 @@
                         borderDash: [4, 3],
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
                         stack: 's'
-                    }]
-                },
+                    });
+
+            const ctx = document.getElementById('monthly-cost-chart');
+            monthlyCostChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: costLabels, datasets: costSets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { filter: c => c.raw != null, callbacks: { label: c => c.dataset.label + ': ' + wonText(Math.round(c.raw)) } } },
                     scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true, grid: { color: gridColor() }, ticks: { callback: v => wonText(v) } }
+                        x: showFc ? { stacked: true } : {},
+                        y: { stacked: !!showFc, beginAtZero: true, grid: { color: gridColor() }, ticks: { callback: v => wonText(v) } }
                     }
                 }
             });
-            setNote('monthly-cost-forecast', costFc.note);
+            setNote('monthly-cost-forecast', showFc ? costFc.note : '');
         }
 
         function renderMonthlyCountChart() {
@@ -934,22 +974,20 @@
                 <div class="text-4xl font-bold text-white mt-1">${L(currentMonthCount.toLocaleString() + '개비', currentMonthCount.toLocaleString())}</div>
             `;
 
-            const countFc = attachMonthForecast(sortedMonths, labels, counts, currentMonth, monthlyMap, 'count');
-
-            const ctx = document.getElementById('monthly-count-chart');
-            monthlyCountChartInstance = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: countFc.labels,
-                    datasets: [{
+            const showFc = forecastOn();
+            const countFc = showFc ? attachMonthForecast(sortedMonths, labels, counts, currentMonth, monthlyMap, 'count') : null;
+            const countLabels = showFc ? countFc.labels : labels;
+            const countActual = showFc ? countFc.actual : counts;
+            const countSets = [{
                         label: L('흡연 갯수', 'Cigarettes'),
-                        data: countFc.actual,
+                        data: countActual,
                         backgroundColor: '#60a5fa',
                         borderColor: '#3b82f6',
                         borderWidth: 1,
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
-                        stack: 's'
-                    }, {
+                        stack: showFc ? 's' : undefined
+                    }];
+            if (showFc) countSets.push({
                         label: L('예측', 'Forecast'),
                         data: countFc.forecast,
                         backgroundColor: FC_MUTE_BG,
@@ -958,42 +996,33 @@
                         borderDash: [4, 3],
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
                         stack: 's'
-                    }]
-                },
+                    });
+
+            const ctx = document.getElementById('monthly-count-chart');
+            monthlyCountChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: countLabels, datasets: countSets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false }, tooltip: { filter: c => c.raw != null } },
+                    plugins: { legend: { display: false }, tooltip: showFc ? { filter: c => c.raw != null } : {} },
                     scales: {
-                        x: { stacked: true },
-                        y: { stacked: true, beginAtZero: true, grid: { color: gridColor() }, ticks: { stepSize: 10 } }
+                        x: showFc ? { stacked: true } : {},
+                        y: { stacked: !!showFc, beginAtZero: true, grid: { color: gridColor() }, ticks: { stepSize: 10 } }
                     }
                 }
             });
-            setNote('monthly-count-forecast', countFc.note);
+            setNote('monthly-count-forecast', showFc ? countFc.note : '');
         }
 
-        function monthDayCount(ym) {
-            return new Date(+ym.slice(0, 4), +ym.slice(5), 0).getDate();
-        }
         function attachMonthForecast(sortedMonths, labels, values, currentMonth, monthlyMap, mode) {
             const preds = getForecastDays();
             const sums = forecastMonthSums(preds);
             const months = sortedMonths.slice();
-            // P2: 30일 모드는 이번 달 남은 기간만. 6개월/1년은 미래 달을 한 달 전체 추정으로만 보여 줌 (일부만 덮인 짧은 막대는 없음)
+            // P3: 이번 달 남은 기간만 (미래 달 막대는 없음)
             const show = {};
             if (sums[currentMonth]) show[currentMonth] = sums[currentMonth];
-            if (predictionDays > 30) {
-                Object.keys(sums).sort().filter(k => k > currentMonth).forEach(k => {
-                    const have = preds.filter(d => d.date.slice(0, 7) === k).length;
-                    const dim = monthDayCount(k);
-                    if (!have) return;
-                    show[k] = have >= dim ? sums[k] : (sums[k] / have) * dim;
-                });
-            }
-            Object.keys(show).sort().forEach(k => { if (!months.includes(k)) months.push(k); });
-            const multiYear = new Set(months.map(m => m.slice(0, 4))).size > 1;
-            const lab = months.map(m => multiYear ? L(`${m.slice(2, 4)}.${m.slice(5)}`, `${MON_EN[Number(m.slice(5)) - 1]} ${m.slice(2, 4)}`) : (labels[sortedMonths.indexOf(m)] || L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1])));
+            const lab = months.map(m => labels[sortedMonths.indexOf(m)] || L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1]));
             const actual = months.map(m => sortedMonths.includes(m) ? values[sortedMonths.indexOf(m)] : null);
             const forecast = months.map(m => {
                 const v = show[m];
@@ -1049,13 +1078,14 @@
         function fillForecastInsight() {
             const el = document.getElementById('prediction-insight');
             if (!el) return;
+            if (!forecastOn()) { el.innerHTML = ''; return; }
             const dailyData = getDailyTotals();
             if (dailyData.length < 7) {
                 el.innerHTML = L(`예측은 7일 이상 기록이 필요해요. (현재 ${dailyData.length}일)`, `Forecast needs 7+ days of records (current: ${dailyData.length}).`);
                 return;
             }
-            const days = predictionDays;
-            const predictions = days <= 30 ? calculateForecast(dailyData, days) : calculateLongForecast(dailyData, days);
+            const days = 30;
+            const predictions = calculateForecast(dailyData, days);
             const avgRecent = dailyData.slice(-7).reduce((a,b)=>a+b.count,0) / 7;
             const totalPred = predictions.reduce((a,b)=>a+b.count,0);
             const avgFuture = totalPred / predictions.length;
@@ -1073,22 +1103,13 @@
                 <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`${label} 예상 흡연량`, `${label} expected total`)}</div><div class="text-lg font-bold text-white">${L(`${Math.round(totalPred).toLocaleString()}개비`, `${Math.round(totalPred).toLocaleString()} cigs`)}</div><div class="text-xs text-zinc-500">${L(`약 ${packs}갑 · 하루 ${avgFuture.toFixed(1)}개비`, `~${packs} packs · ${avgFuture.toFixed(1)}/day`)}</div></div>
                 <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${packPrice().toLocaleString()}원 기준`, `Based on ₩${packPrice().toLocaleString()}/pack`)}</div></div>
             </div>`;
-            if (days > 30) {
-                const recordedDays = dailyData.length;
-                text += `<p class="mt-3 text-xs text-zinc-500">⚠️ ${L(`현재 약 ${recordedDays}일치 기록만으로 계산한 장기 예측이라 대략적인 참고용입니다. 기록이 쌓일수록 정확해집니다.`, `This long-range forecast is based on only ~${recordedDays} days of records, so treat it as a rough guide. It gets more accurate as records build up.`)}</p>`;
-            }
             el.innerHTML = text;
         }
 
         function showPrediction() {
             if (window.showTab) window.showTab('ana');
-            fillForecastInsight();
-            if (typeof renderDailyTrendChart === 'function') {
-                renderDailyTrendChart();
-                renderMonthlyCostChart();
-                renderMonthlyCountChart();
-            }
-            refreshOpenReports();
+            forecastOpen = true;
+            applyForecastView();
         }
 
         // 장기 예측: 기록 없는 날은 0개비로 채운 달력 기준 일평균 + 완만하게 감쇠되는 추세
@@ -1224,6 +1245,8 @@
             const section = document.getElementById('prediction-section');
             if (section) section.classList.add('hidden');
             if (predictionChartInstance) { try { predictionChartInstance.destroy(); } catch (e) {} predictionChartInstance = null; }
+            forecastOpen = false;
+            if (typeof applyForecastView === 'function' && document.getElementById('daily-trend-chart')) applyForecastView();
         }
 
         // ===== 클라우드 동기화 (선택 기능) — 순수 병합 로직 =====
