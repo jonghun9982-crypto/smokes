@@ -181,12 +181,33 @@
         html.light .tabbar { background: rgba(255,253,249,0.92); border-top-color: #e4dccf; }
         html.light .tabbar button { color: #8a8178; }
         html.light .tabbar button.on { color: #1c1917; }
-        .forecast-chip { flex-shrink: 0; margin-top: 1px; padding: 3px 9px; border-radius: 9999px; border: 1px solid #52525b; background: transparent; color: #a1a1aa; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.35; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
-        .forecast-chip[aria-pressed="true"] { border-color: #a1a1aa; background: rgba(161,161,170,0.2); color: #e4e4e7; }
-        .forecast-chip[aria-disabled="true"] { opacity: 0.55; border-color: #3f3f46; color: #71717a; }
-        html.light .forecast-chip { border-color: #d6d3d1; color: #78716c; }
-        html.light .forecast-chip[aria-pressed="true"] { border-color: #a8a29e; background: rgba(120,113,108,0.14); color: #44403c; }
-        html.light .forecast-chip[aria-disabled="true"] { border-color: #e7e5e4; color: #a8a29e; }
+        .forecast-chip { flex-shrink: 0; margin-top: 1px; padding: 3px 9px; border-radius: 9999px; border: 1px solid rgba(45, 212, 191, 0.55); background: rgba(45, 212, 191, 0.10); color: #5eead4; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.35; white-space: nowrap; -webkit-tap-highlight-color: transparent; box-shadow: 0 0 8px 1px rgba(56, 189, 248, 0.28), 0 0 16px rgba(45, 212, 191, 0.14); animation: forecast-chip-pulse 4.2s ease-in-out infinite; }
+        .forecast-chip[aria-pressed="true"] { border-color: rgba(56, 189, 248, 0.85); background: rgba(56, 189, 248, 0.20); color: #7dd3fc; box-shadow: 0 0 10px 2px rgba(56, 189, 248, 0.42), 0 0 22px rgba(45, 212, 191, 0.22); animation-name: forecast-chip-pulse-on; }
+        .forecast-chip[aria-disabled="true"] { opacity: 0.55; border-color: #3f3f46; color: #71717a; background: transparent; box-shadow: none; animation: none; }
+        html.light .forecast-chip { border-color: rgba(13, 148, 136, 0.55); background: rgba(13, 148, 136, 0.10); color: #0f766e; box-shadow: 0 0 8px 1px rgba(2, 132, 199, 0.20), 0 0 14px rgba(13, 148, 136, 0.12); animation-name: forecast-chip-pulse-light; }
+        html.light .forecast-chip[aria-pressed="true"] { border-color: rgba(2, 132, 199, 0.7); background: rgba(2, 132, 199, 0.14); color: #0369a1; box-shadow: 0 0 10px 2px rgba(2, 132, 199, 0.32), 0 0 18px rgba(13, 148, 136, 0.16); animation-name: forecast-chip-pulse-light-on; }
+        html.light .forecast-chip[aria-disabled="true"] { border-color: #e7e5e4; color: #a8a29e; background: transparent; box-shadow: none; animation: none; }
+        @keyframes forecast-chip-pulse {
+            0%, 100% { box-shadow: 0 0 7px 1px rgba(56, 189, 248, 0.22), 0 0 14px rgba(45, 212, 191, 0.10); }
+            50% { box-shadow: 0 0 11px 2px rgba(56, 189, 248, 0.36), 0 0 18px rgba(45, 212, 191, 0.18); }
+        }
+        @keyframes forecast-chip-pulse-on {
+            0%, 100% { box-shadow: 0 0 9px 2px rgba(56, 189, 248, 0.36), 0 0 18px rgba(45, 212, 191, 0.16); }
+            50% { box-shadow: 0 0 14px 3px rgba(56, 189, 248, 0.50), 0 0 24px rgba(45, 212, 191, 0.26); }
+        }
+        @keyframes forecast-chip-pulse-light {
+            0%, 100% { box-shadow: 0 0 7px 1px rgba(2, 132, 199, 0.16), 0 0 12px rgba(13, 148, 136, 0.10); }
+            50% { box-shadow: 0 0 11px 2px rgba(2, 132, 199, 0.28), 0 0 16px rgba(13, 148, 136, 0.16); }
+        }
+        @keyframes forecast-chip-pulse-light-on {
+            0%, 100% { box-shadow: 0 0 9px 2px rgba(2, 132, 199, 0.26), 0 0 16px rgba(13, 148, 136, 0.14); }
+            50% { box-shadow: 0 0 13px 3px rgba(2, 132, 199, 0.38), 0 0 22px rgba(13, 148, 136, 0.20); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .forecast-chip, .forecast-chip[aria-pressed="true"] { animation: none !important; }
+        }
+        .report-list li.report-section { list-style: none; margin: 10px 0 2px -18px; padding: 8px 0 0; border-top: 1px solid #3f3f46; font-weight: 600; color: #e4e4e7; }
+        html.light .report-list li.report-section { border-top-color: #e7e5e4; color: #44403c; }
         html.light .start-scr { background: rgba(247,243,236,0.78); color: #1c1917; }
         html.light .start-scr p, html.light .start-scr .skip { color: #57534e; }
         html.light .start-scr .gbtn { background: rgba(255,255,255,0.7); border-color: #ded5c7; color: #1c1917; }
@@ -321,7 +342,7 @@
         <div data-tab="ana" class="px-6 mb-6">
             <div class="flex items-start justify-between gap-2 mb-2 px-1">
                 <h3 class="text-sm text-zinc-400 min-w-0" data-i18n="hHourly" style="word-break:keep-all">시간대별 흡연량 (전체 기간)</h3>
-                <button type="button" id="forecast-toggle-btn" onclick="toggleForecast()" class="forecast-chip" aria-pressed="false">예측 β</button>
+                <button type="button" id="forecast-toggle-btn" onclick="toggleForecast()" class="forecast-chip" aria-pressed="false">예측</button>
             </div>
             <div class="bg-zinc-800 rounded-3xl p-4">
                 <div class="chart-container h-[220px]">
@@ -346,10 +367,6 @@
                 <div class="report-wrap">
                     <button type="button" class="report-btn" onclick="toggleReport('daily', this)" aria-expanded="false" aria-controls="report-daily"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-daily" class="report-box hidden"></div>
-                </div>
-                <div id="forecast-report-wrap" class="hidden report-wrap">
-                    <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="reportForecast">예측 리포트</span></button>
-                    <div id="report-prediction" class="report-box hidden"></div>
                 </div>
             </div>
         </div>
@@ -720,7 +737,7 @@
                 btn.setAttribute('aria-pressed', forecastOn() ? 'true' : 'false');
                 btn.setAttribute('aria-disabled', enough ? 'false' : 'true');
                 if (enough) {
-                    btn.textContent = L('예측 β', 'Forecast β');
+                    btn.textContent = L('예측', 'Forecast');
                     btn.removeAttribute('title');
                     btn.setAttribute('aria-label', forecastOn() ? L('예측 숨기기', 'Hide forecast') : L('예측 보기', 'Show forecast'));
                 } else {
@@ -730,7 +747,7 @@
                 }
             }
             const on = forecastOn();
-            ['daily-forecast-note', 'monthly-cost-forecast', 'monthly-count-forecast', 'hourly-forecast-note', 'forecast-report-wrap'].forEach(id => {
+            ['daily-forecast-note', 'monthly-cost-forecast', 'monthly-count-forecast', 'hourly-forecast-note'].forEach(id => {
                 const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !on);
             });
         }
@@ -1917,7 +1934,17 @@
         const REPORT_BUILDERS = {
             today: () => buildTodayReport(records),
             hourly: () => buildHourlyReport(records),
-            daily: () => buildDailyReport(records),
+            daily: () => {
+                const lines = buildDailyReport(records);
+                if (forecastOn()) {
+                    const fc = buildPredictionReport(records, predictionDays);
+                    if (fc && fc.length) {
+                        lines.push({ section: L('예측', 'Forecast') });
+                        lines.push(...fc);
+                    }
+                }
+                return lines;
+            },
             prediction: () => buildPredictionReport(records, predictionDays),
             cost: () => buildMonthlyReport(records, 'cost'),
             count: () => buildMonthlyReport(records, 'count'),
@@ -1939,7 +1966,10 @@
             if (!box || !REPORT_BUILDERS[key]) return;
             let lines;
             try { lines = REPORT_BUILDERS[key](); } catch (e) { lines = [L('리포트를 만드는 중 문제가 생겼어요.', 'Something went wrong while building the report.')]; }
-            box.innerHTML = '<ul class="report-list">' + lines.map(l => `<li>${escapeReport(l)}</li>`).join('') + '</ul>';
+            box.innerHTML = '<ul class="report-list">' + lines.map(l => {
+                if (l && typeof l === 'object' && l.section) return `<li class="report-section">${escapeReport(l.section)}</li>`;
+                return `<li>${escapeReport(l)}</li>`;
+            }).join('') + '</ul>';
         }
 
         function refreshOpenReports() {
@@ -2418,7 +2448,7 @@
             sub: ['기록 • 분석 • 목표', 'Log • Analyze • Goal'], quick: ['지금 흡연 기록 (+1)', 'Log a cigarette now (+1)'],
             fDate: ['날짜', 'Date'], fTime: ['시간', 'Time'], fCount: ['개수', 'Count'], fNote: ['메모 (선택)', 'Note (optional)'],
             notePh: ['스트레스, 커피 등', 'Stress, coffee, etc.'], addManual: ['지정 날짜로 기록 추가', 'Add record for this date'],
-            today: ['오늘 흡연', 'Today'], report: ['리포트', 'Report'], reportForecast: ['예측 리포트', 'Forecast report'],
+            today: ['오늘 흡연', 'Today'], report: ['리포트', 'Report'],
             hHourly: ['시간대별 흡연량 (전체 기간)', 'By hour of day (all time)'], hDaily: ['일별 추이 (최근 30일)', 'Daily trend (last 30 days)'],
             hForecast: ['예측 기간', 'Forecast period'],
             hCost: ['월별 담배 지출', 'Monthly spending'], hCount: ['월별 총 흡연 갯수', 'Monthly total'],
