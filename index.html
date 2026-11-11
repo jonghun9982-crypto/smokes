@@ -245,7 +245,7 @@
         <div class="hdr px-6 pt-8 pb-4 flex items-center justify-between">
             <div>
                 <h1 class="text-3xl font-semibold tracking-tight">Smokes</h1>
-                <p class="text-zinc-500 text-sm" data-i18n="sub">기록 • 분석 • 예측 • 목표</p>
+                <p class="text-zinc-500 text-sm" data-i18n="sub">기록 • 분석 • 목표</p>
             </div>
             <div class="hdr-btns">
                 <button type="button" id="theme-btn" class="hdr-btn" aria-label="라이트 모드로 전환">
@@ -325,6 +325,16 @@
             </div>
         </div>
 
+        <!-- P1: 예측 기간 · 아래 일별·월별 차트에만 반영 (시간대별은 그대로) -->
+        <div data-tab="ana" class="px-6 mb-5" id="forecast-period-wrap">
+            <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hForecast">예측 기간</h3>
+            <div id="prediction-period" class="grid grid-cols-3 gap-2 bg-zinc-900 p-1 rounded-2xl" role="tablist">
+                <button type="button" data-days="30" onclick="setPredictionPeriod(30)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p30">30일</button>
+                <button type="button" data-days="180" onclick="setPredictionPeriod(180)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p180">6개월</button>
+                <button type="button" data-days="365" onclick="setPredictionPeriod(365)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p365">1년</button>
+            </div>
+        </div>
+
         <!-- 일별 추이 -->
         <div data-tab="ana" class="px-6 mb-6">
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hDaily">일별 추이 (최근 30일)</h3>
@@ -332,6 +342,7 @@
                 <div class="chart-container h-[200px]">
                     <canvas id="daily-trend-chart"></canvas>
                 </div>
+                <div id="daily-forecast-note" class="mt-3 text-sm text-zinc-400 leading-snug" style="word-break:keep-all"></div>
                 <div class="report-wrap">
                     <button type="button" class="report-btn" onclick="toggleReport('daily', this)" aria-expanded="false" aria-controls="report-daily"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-daily" class="report-box hidden"></div>
@@ -339,34 +350,11 @@
             </div>
         </div>
 
-        <!-- 예측 (30일 / 6개월 / 1년) -->
-        <div data-tab="pre" class="px-6 mb-6">
-            <div id="prediction-period" class="grid grid-cols-3 gap-2 mb-3 bg-zinc-900 p-1 rounded-2xl" role="tablist">
-                <button type="button" data-days="30" onclick="setPredictionPeriod(30)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p30">30일</button>
-                <button type="button" data-days="180" onclick="setPredictionPeriod(180)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p180">6개월</button>
-                <button type="button" data-days="365" onclick="setPredictionPeriod(365)" class="pred-period-btn py-2 rounded-xl text-sm font-semibold" data-i18n="p365">1년</button>
-            </div>
-            <button onclick="showPrediction()" class="w-full bg-blue-600 hover:bg-blue-700 py-4 rounded-3xl flex items-center justify-center gap-3 text-lg font-semibold">
-                <i class="fa-solid fa-chart-line"></i>
-                <span id="prediction-btn-label">30일 예측 보기</span>
-            </button>
-        </div>
-
-        <!-- Prediction Result -->
-        <div data-tab="pre" id="prediction-section" class="hidden px-6 mb-8">
-            <div class="bg-zinc-800 border border-zinc-700 rounded-3xl p-6">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 id="prediction-title" class="font-semibold text-lg">30일 예측</h3>
-                    <button onclick="hidePrediction()" class="text-zinc-400"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-                <div class="h-[240px]">
-                    <canvas id="prediction-chart"></canvas>
-                </div>
-                <div id="prediction-insight" class="mt-4 text-sm text-zinc-300 bg-zinc-900/50 p-4 rounded-2xl"></div>
-                <div class="report-wrap">
-                    <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
-                    <div id="report-prediction" class="report-box hidden"></div>
-                </div>
+        <div data-tab="ana" class="px-6 mb-6" id="forecast-insight-wrap">
+            <div id="prediction-insight" class="text-sm text-zinc-300 bg-zinc-800 rounded-3xl p-4 leading-snug" style="word-break:keep-all"></div>
+            <div class="report-wrap px-1">
+                <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
+                <div id="report-prediction" class="report-box hidden"></div>
             </div>
         </div>
 
@@ -375,6 +363,7 @@
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hCost">월별 담배 지출</h3>
             <div class="bg-zinc-800 rounded-3xl p-5">
                 <div id="monthly-cost-summary" class="mb-4 text-center"></div>
+                <div id="monthly-cost-forecast" class="mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
                 <div class="chart-container h-[200px]">
                     <canvas id="monthly-cost-chart"></canvas>
                 </div>
@@ -390,6 +379,7 @@
             <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hCount">월별 총 흡연 갯수</h3>
             <div class="bg-zinc-800 rounded-3xl p-5">
                 <div id="monthly-count-summary" class="mb-4 text-center"></div>
+                <div id="monthly-count-forecast" class="mb-3 -mt-2 text-sm text-zinc-400 text-center leading-snug" style="word-break:keep-all"></div>
                 <div class="chart-container h-[200px]">
                     <canvas id="monthly-count-chart"></canvas>
                 </div>
@@ -512,16 +502,22 @@
 
     </div>
 
+    <!-- P1: 예전 예측 탭 DOM id를 숨겨 유지 -->
+    <div id="prediction-section" class="hidden" hidden aria-hidden="true">
+        <span id="prediction-btn-label"></span>
+        <span id="prediction-title"></span>
+        <canvas id="prediction-chart" width="1" height="1"></canvas>
+    </div>
     <nav id="tabbar" class="tabbar" role="tablist">
         <button data-go="rec" role="tab" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg><span data-i18n="tRec">기록</span></button>
         <button data-go="ana" role="tab"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg><span data-i18n="tAna">분석</span></button>
-        <button data-go="pre" role="tab"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg><span data-i18n="tPre">예측</span></button>
         <button data-go="goal" role="tab"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4.5L17 13H5"/></svg><span data-i18n="tGoal">목표</span></button>
         <button data-go="acc" role="tab"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span data-i18n="tAcc">계정</span></button>
     </nav>
     <script>
     (function () {
         function show(t) {
+            if (t === 'pre') t = 'ana';  // P1: 예측 탭 제거 · 예전 showTab('pre') 호출은 분석으로
             document.querySelectorAll('[data-tab]').forEach(function (el) { el.classList.toggle('tab-off', el.getAttribute('data-tab') !== t); });
             document.querySelectorAll('#tabbar button').forEach(function (b) { var on = b.getAttribute('data-go') === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
             try { localStorage.setItem('smokingActiveTab', t); } catch (e) {}
@@ -641,7 +637,7 @@
                 else localStorage.removeItem('smokingRecordsAdvanced');
             }
             renderAll();
-            document.getElementById('prediction-section').classList.add('hidden');
+            const _ps = document.getElementById('prediction-section'); if (_ps) _ps.classList.add('hidden');
             showToast(L('모든 기록을 삭제했어요. 백업해 두었어요.', 'All records deleted. A backup was saved.'), true);
         }
 
@@ -654,6 +650,7 @@
             renderDailyTrendChart();
             renderMonthlyCostChart();
             renderMonthlyCountChart();
+            fillForecastInsight();
             refreshOpenReports();
         }
 
@@ -708,34 +705,110 @@
             return Object.keys(map).sort().map(date => ({ date, count: map[date] }));
         }
 
+        // P1: 예측은 분석의 일별·월별 차트에만 (시간대별은 그대로). 계산은 기존 calculateForecast / calculateLongForecast 그대로
+        const FC_MUTE_BG = 'rgba(161, 161, 170, 0.28)';
+        const FC_MUTE_BD = 'rgba(161, 161, 170, 0.95)';
+        function getForecastDays() {
+            const dailyData = getDailyTotals();
+            if (dailyData.length < 7) return [];
+            return predictionDays <= 30 ? calculateForecast(dailyData, predictionDays) : calculateLongForecast(dailyData, predictionDays);
+        }
+        function forecastMonthSums(preds) {
+            const m = {};
+            (preds || []).forEach(d => { const k = d.date.slice(0, 7); m[k] = (m[k] || 0) + d.count; });
+            return m;
+        }
+        function setNote(id, html) { const el = document.getElementById(id); if (el) el.innerHTML = html || ''; }
+
         function renderDailyTrendChart() {
             if (dailyChartInstance) dailyChartInstance.destroy();
             const daily = getDailyTotals().slice(-30);
-            if (daily.length === 0) return;
+            if (daily.length === 0) { setNote('daily-forecast-note', ''); return; }
+
+            const preds = getForecastDays();
+            const showN = Math.min(10, preds.length);
+            const fut = preds.slice(0, showN);
+            const labels = daily.map(d => d.date.slice(5)).concat(fut.map(d => d.date.slice(5)));
+            const actual = daily.map(d => d.count).concat(fut.map(() => null));
+            const forecast = daily.map(() => null).concat(fut.map(d => d.count));
+            const line = daily.map((d, i) => i === daily.length - 1 ? d.count : null).concat(fut.map(d => d.count));
 
             const ctx = document.getElementById('daily-trend-chart');
             dailyChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: daily.map(d => d.date.slice(5)),
+                    labels,
                     datasets: [{
                         label: L('일별 흡연량', 'Daily count'),
-                        data: daily.map(d => d.count),
+                        data: actual,
                         backgroundColor: 'rgba(96, 165, 250, 0.75)',
                         borderColor: '#60a5fa',
                         borderWidth: 1,
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
-                        maxBarThickness: 18
+                        maxBarThickness: 18,
+                        order: 2
+                    }, {
+                        label: L('예측', 'Forecast'),
+                        data: forecast,
+                        backgroundColor: FC_MUTE_BG,
+                        borderColor: FC_MUTE_BD,
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
+                        maxBarThickness: 18,
+                        order: 2
+                    }, {
+                        type: 'line',
+                        label: L('예측 추이', 'Forecast trend'),
+                        data: line,
+                        borderColor: FC_MUTE_BD,
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 4],
+                        pointRadius: 2,
+                        pointHitRadius: 8,
+                        pointBackgroundColor: FC_MUTE_BD,
+                        tension: 0,
+                        fill: false,
+                        order: 1
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, filter: c => c.raw != null } },
                     scales: { y: { beginAtZero: true, grid: { color: gridColor() } } }
                 }
             });
+            setNote('daily-forecast-note', dailyForecastNoteHtml(preds));
+        }
+
+        function dailyForecastNoteHtml(preds) {
+            if (getDailyTotals().length < 7) return L('예측은 7일 이상 기록이 필요해요.', 'Forecast needs 7+ days of records.');
+            if (!preds.length) return '';
+            const todayStr = new Date().toLocaleDateString('sv-SE');
+            const t = new Date(todayStr + 'T00:00:00');
+            const dow = t.getDay();
+            const monOff = dow === 0 ? -6 : 1 - dow;
+            const days = [];
+            for (let i = 0; i < 7; i++) { const d = new Date(t); d.setDate(t.getDate() + monOff + i); days.push(d.toLocaleDateString('sv-SE')); }
+            const am = Object.fromEntries(getDailyTotals().map(d => [d.date, d.count]));
+            const pm = Object.fromEntries(preds.map(d => [d.date, d.count]));
+            let actual = 0, future = 0, futureN = 0;
+            days.forEach(k => {
+                if (k <= todayStr) actual += am[k] || 0;
+                else if (pm[k] != null) { future += pm[k]; futureN++; }
+            });
+            const weekTot = Math.round(actual + future);
+            const periodTot = Math.round(preds.reduce((a, b) => a + b.count, 0));
+            const periodCost = Math.round(preds.reduce((a, b) => a + b.count, 0) * pricePerCig());
+            const legend = L('회색 점선 = 예측', 'dashed gray = forecast');
+            const week = futureN
+                ? L(`이번 주 예상 ${weekTot}개비 (지금까지 ${Math.round(actual)} · 남은 ${futureN}일 ${Math.round(future)})`, `This week expected ${weekTot} (so far ${Math.round(actual)} · ${futureN} days left ${Math.round(future)})`)
+                : L(`이번 주 예상 ${weekTot}개비`, `This week expected ${weekTot}`);
+            const fwd = L(`앞으로 ${periodLabel(predictionDays)} 예상 ${periodTot.toLocaleString()}개비 · ${wonText(periodCost)}`, `Next ${periodLabel(predictionDays)}: ${periodTot.toLocaleString()} · ${wonText(periodCost)}`);
+            return `<div class="text-zinc-300 font-medium">${week}</div><div class="mt-0.5">${fwd}</div><div class="mt-1 text-[11px] text-zinc-500">${legend}</div>`;
         }
 
         function renderHourlyBarChart() {
@@ -795,33 +868,47 @@
             const currentMonthCost = monthlyMap[currentMonth] ? Math.round(monthlyMap[currentMonth] * pricePerCig()) : 0;
 
             document.getElementById('monthly-cost-summary').innerHTML = `
-                <div class="text-sm text-zinc-400">${L('이번 달 예상 지출', 'Spending this month')}</div>
+                <div class="text-sm text-zinc-400">${L('이번 달 쓴 돈', 'Spent this month')}</div>
                 <div class="text-4xl font-bold text-white mt-1">${wonText(currentMonthCost)}</div>
             `;
+
+            const costFc = attachMonthForecast(sortedMonths, labels, costs, currentMonth, monthlyMap, 'cost');
 
             const ctx = document.getElementById('monthly-cost-chart');
             monthlyCostChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: labels,
+                    labels: costFc.labels,
                     datasets: [{
                         label: L('지출 (원)', 'Spending (KRW)'),
-                        data: costs,
+                        data: costFc.actual,
                         backgroundColor: '#f87171',
                         borderColor: '#ef4444',
                         borderWidth: 1,
-                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED
+                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
+                        stack: 's'
+                    }, {
+                        label: L('예측', 'Forecast'),
+                        data: costFc.forecast,
+                        backgroundColor: FC_MUTE_BG,
+                        borderColor: FC_MUTE_BD,
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
+                        stack: 's'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: false }, tooltip: { filter: c => c.raw != null, callbacks: { label: c => c.dataset.label + ': ' + wonText(Math.round(c.raw)) } } },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: gridColor() }, ticks: { callback: v => wonText(v) } }
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, grid: { color: gridColor() }, ticks: { callback: v => wonText(v) } }
                     }
                 }
             });
+            setNote('monthly-cost-forecast', costFc.note);
         }
 
         function renderMonthlyCountChart() {
@@ -847,29 +934,86 @@
                 <div class="text-4xl font-bold text-white mt-1">${L(currentMonthCount.toLocaleString() + '개비', currentMonthCount.toLocaleString())}</div>
             `;
 
+            const countFc = attachMonthForecast(sortedMonths, labels, counts, currentMonth, monthlyMap, 'count');
+
             const ctx = document.getElementById('monthly-count-chart');
             monthlyCountChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: labels,
+                    labels: countFc.labels,
                     datasets: [{
                         label: L('흡연 갯수', 'Cigarettes'),
-                        data: counts,
+                        data: countFc.actual,
                         backgroundColor: '#60a5fa',
                         borderColor: '#3b82f6',
                         borderWidth: 1,
-                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED
+                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
+                        stack: 's'
+                    }, {
+                        label: L('예측', 'Forecast'),
+                        data: countFc.forecast,
+                        backgroundColor: FC_MUTE_BG,
+                        borderColor: FC_MUTE_BD,
+                        borderWidth: 1.5,
+                        borderDash: [4, 3],
+                        borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
+                        stack: 's'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: false }, tooltip: { filter: c => c.raw != null } },
                     scales: {
-                        y: { beginAtZero: true, grid: { color: gridColor() }, ticks: { stepSize: 10 } }
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true, grid: { color: gridColor() }, ticks: { stepSize: 10 } }
                     }
                 }
             });
+            setNote('monthly-count-forecast', countFc.note);
+        }
+
+        function monthDayCount(ym) {
+            return new Date(+ym.slice(0, 4), +ym.slice(5), 0).getDate();
+        }
+        function attachMonthForecast(sortedMonths, labels, values, currentMonth, monthlyMap, mode) {
+            const preds = getForecastDays();
+            const sums = forecastMonthSums(preds);
+            const months = sortedMonths.slice();
+            // P2: 30일 모드는 이번 달 남은 기간만. 6개월/1년은 미래 달을 한 달 전체 추정으로만 보여 줌 (일부만 덮인 짧은 막대는 없음)
+            const show = {};
+            if (sums[currentMonth]) show[currentMonth] = sums[currentMonth];
+            if (predictionDays > 30) {
+                Object.keys(sums).sort().filter(k => k > currentMonth).forEach(k => {
+                    const have = preds.filter(d => d.date.slice(0, 7) === k).length;
+                    const dim = monthDayCount(k);
+                    if (!have) return;
+                    show[k] = have >= dim ? sums[k] : (sums[k] / have) * dim;
+                });
+            }
+            Object.keys(show).sort().forEach(k => { if (!months.includes(k)) months.push(k); });
+            const multiYear = new Set(months.map(m => m.slice(0, 4))).size > 1;
+            const lab = months.map(m => multiYear ? L(`${m.slice(2, 4)}.${m.slice(5)}`, `${MON_EN[Number(m.slice(5)) - 1]} ${m.slice(2, 4)}`) : (labels[sortedMonths.indexOf(m)] || L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1])));
+            const actual = months.map(m => sortedMonths.includes(m) ? values[sortedMonths.indexOf(m)] : null);
+            const forecast = months.map(m => {
+                const v = show[m];
+                if (v == null || v === 0) return null;
+                return mode === 'cost' ? Math.round(v * pricePerCig()) : Math.round(v);
+            });
+            const remain = sums[currentMonth] || 0;
+            const soFar = monthlyMap[currentMonth] || 0;
+            const total = soFar + remain;
+            let note = '';
+            if (getDailyTotals().length < 7) note = L('예측은 7일 이상 기록이 필요해요.', 'Forecast needs 7+ days of records.');
+            else if (preds.length) {
+                const totDisp = mode === 'cost' ? wonText(Math.round(total * pricePerCig())) : L(`${Math.round(total).toLocaleString()}개비`, `${Math.round(total).toLocaleString()}`);
+                const remDisp = mode === 'cost' ? wonText(Math.round(remain * pricePerCig())) : L(`${Math.round(remain).toLocaleString()}개비`, `${Math.round(remain).toLocaleString()}`);
+                note = remain
+                    ? L(`이번 달 예상 ${totDisp} (남은 기간 ${remDisp})`, `This month expected ${totDisp} (remaining ${remDisp})`)
+                    : L(`이번 달 예상 ${totDisp}`, `This month expected ${totDisp}`);
+                note += `<div class="text-[11px] text-zinc-500 mt-0.5">${L('회색 점선 = 예측', 'dashed gray = forecast')}</div>`;
+            }
+            return { labels: lab, actual, forecast, note, remain, total, soFar };
         }
 
         let predictionDays = 30;
@@ -889,21 +1033,28 @@
                 btn.setAttribute('aria-selected', active ? 'true' : 'false');
             });
             const label = periodLabel(days);
-            document.getElementById('prediction-btn-label').textContent = L(`${label} 예측 보기`, `Show ${label} forecast`);
-            document.getElementById('prediction-title').textContent = L(`${label} 예측`, `${label} forecast`);
-            if (!document.getElementById('prediction-section').classList.contains('hidden')) showPrediction();
+            const lab = document.getElementById('prediction-btn-label');
+            const tit = document.getElementById('prediction-title');
+            if (lab) lab.textContent = L(`${label} 예측 보기`, `Show ${label} forecast`);
+            if (tit) tit.textContent = L(`${label} 예측`, `${label} forecast`);
+            if (typeof records !== 'undefined' && Array.isArray(records) && document.getElementById('daily-trend-chart')) {
+                renderDailyTrendChart();
+                renderMonthlyCostChart();
+                renderMonthlyCountChart();
+                fillForecastInsight();
+                refreshOpenReports();
+            }
         }
 
-        function showPrediction() {
+        function fillForecastInsight() {
+            const el = document.getElementById('prediction-insight');
+            if (!el) return;
             const dailyData = getDailyTotals();
             if (dailyData.length < 7) {
-                alert(L(`최소 7일 이상의 데이터가 필요합니다.\n현재: ${dailyData.length}일`, `At least 7 days of data are needed.\nCurrent: ${dailyData.length} days`));
+                el.innerHTML = L(`예측은 7일 이상 기록이 필요해요. (현재 ${dailyData.length}일)`, `Forecast needs 7+ days of records (current: ${dailyData.length}).`);
                 return;
             }
-            const section = document.getElementById('prediction-section');
-            section.classList.remove('hidden');
             const days = predictionDays;
-
             const predictions = days <= 30 ? calculateForecast(dailyData, days) : calculateLongForecast(dailyData, days);
             const avgRecent = dailyData.slice(-7).reduce((a,b)=>a+b.count,0) / 7;
             const totalPred = predictions.reduce((a,b)=>a+b.count,0);
@@ -911,7 +1062,7 @@
             const change = avgRecent > 0 ? ((avgFuture - avgRecent) / avgRecent * 100).toFixed(1) : '0.0';
 
             let text = '';
-            if (change > 10) text = L(`최근 7일 평균 대비 <span class="text-red-400">+${change}%</span> 증가 예상`, `Expected <span class="text-red-400">+${change}%</span> vs. last 7-day average`);
+            if (change > 10) text = L(`최근 7일 평균 대비 <span class="text-zinc-200 font-medium">+${change}%</span> 증가 예상`, `Expected <span class="text-zinc-200 font-medium">+${change}%</span> vs. last 7-day average`);
             else if (change < -10) text = L(`최근 대비 <span class="text-emerald-400">${change}%</span> 감소 예상`, `Expected <span class="text-emerald-400">${change}%</span> vs. recent`);
             else text = L(`최근과 비슷한 수준을 유지할 것으로 예상됩니다.`, `Expected to stay about the same as recently.`);
 
@@ -919,17 +1070,23 @@
             const totalCost = Math.round(totalPred * pricePerCig());
             const packs = (totalPred / CIGARETTES_PER_PACK).toFixed(1);
             text += `<div class="mt-3 grid grid-cols-2 gap-2 text-center">
-                <div class="bg-zinc-800 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`${label} 예상 흡연량`, `${label} expected total`)}</div><div class="text-lg font-bold text-white">${L(`${Math.round(totalPred).toLocaleString()}개비`, `${Math.round(totalPred).toLocaleString()} cigs`)}</div><div class="text-xs text-zinc-500">${L(`약 ${packs}갑 · 하루 ${avgFuture.toFixed(1)}개비`, `~${packs} packs · ${avgFuture.toFixed(1)}/day`)}</div></div>
-                <div class="bg-zinc-800 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${packPrice().toLocaleString()}원 기준`, `Based on ₩${packPrice().toLocaleString()}/pack`)}</div></div>
+                <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`${label} 예상 흡연량`, `${label} expected total`)}</div><div class="text-lg font-bold text-white">${L(`${Math.round(totalPred).toLocaleString()}개비`, `${Math.round(totalPred).toLocaleString()} cigs`)}</div><div class="text-xs text-zinc-500">${L(`약 ${packs}갑 · 하루 ${avgFuture.toFixed(1)}개비`, `~${packs} packs · ${avgFuture.toFixed(1)}/day`)}</div></div>
+                <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${packPrice().toLocaleString()}원 기준`, `Based on ₩${packPrice().toLocaleString()}/pack`)}</div></div>
             </div>`;
             if (days > 30) {
                 const recordedDays = dailyData.length;
-                text += `<p class="mt-3 text-xs text-amber-300/90">⚠️ ${L(`현재 약 ${recordedDays}일치 기록만으로 계산한 장기 예측이라 대략적인 참고용입니다. 기록이 쌓일수록 정확해집니다.`, `This long-range forecast is based on only ~${recordedDays} days of records, so treat it as a rough guide. It gets more accurate as records build up.`)}</p>`;
-                document.getElementById('prediction-insight').innerHTML = text;
-                drawMonthlyPredictionChart(dailyData, predictions);
-            } else {
-                document.getElementById('prediction-insight').innerHTML = text;
-                drawPredictionChart(dailyData, predictions);
+                text += `<p class="mt-3 text-xs text-zinc-500">⚠️ ${L(`현재 약 ${recordedDays}일치 기록만으로 계산한 장기 예측이라 대략적인 참고용입니다. 기록이 쌓일수록 정확해집니다.`, `This long-range forecast is based on only ~${recordedDays} days of records, so treat it as a rough guide. It gets more accurate as records build up.`)}</p>`;
+            }
+            el.innerHTML = text;
+        }
+
+        function showPrediction() {
+            if (window.showTab) window.showTab('ana');
+            fillForecastInsight();
+            if (typeof renderDailyTrendChart === 'function') {
+                renderDailyTrendChart();
+                renderMonthlyCostChart();
+                renderMonthlyCountChart();
             }
             refreshOpenReports();
         }
@@ -1064,8 +1221,9 @@
         }
 
         function hidePrediction() {
-            document.getElementById('prediction-section').classList.add('hidden');
-            if (predictionChartInstance) predictionChartInstance.destroy();
+            const section = document.getElementById('prediction-section');
+            if (section) section.classList.add('hidden');
+            if (predictionChartInstance) { try { predictionChartInstance.destroy(); } catch (e) {} predictionChartInstance = null; }
         }
 
         // ===== 클라우드 동기화 (선택 기능) — 순수 병합 로직 =====
@@ -2207,7 +2365,7 @@
             const predSection = document.getElementById('prediction-section');
             if (predSection) predSection.classList.add('hidden');
 
-            alert(L('샘플 데이터가 성공적으로 생성되었습니다! (총 ' + records.length + '건)\n\n"30일 예측 보기" 버튼을 클릭해 트렌드와 예측을 확인해보세요.', 'Sample data created! (' + records.length + ' records)\n\nTap "Show 30-day forecast" to see the trend and forecast.'));
+            alert(L('샘플 데이터가 성공적으로 생성되었습니다! (총 ' + records.length + '건)\n\n분석 탭에서 일별·월별 차트의 예측을 확인할 수 있어요.', 'Sample data created! (' + records.length + ' records)\n\nOpen Analyze to see the forecast on the daily and monthly charts.'));
             showToast(L('샘플 데이터로 바꿨어요. 이전 기록은 백업해 두었어요.', 'Switched to sample data. Your previous records were backed up.'), true);
         }
 
@@ -2215,11 +2373,12 @@
         const I18N = {
             startDesc: ['로그인은 선택이에요. 여러 기기에서 기록을 동기화하고 싶을 때만 로그인하세요. 로그인하지 않아도 모든 기능을 쓸 수 있어요.', 'Login is optional. Only log in if you want to sync records across devices. Every feature works without logging in.'],
             startLogin: ['Google로 로그인', 'Sign in with Google'], startSkip: ['로그인 없이 사용', 'Use without login'],
-            sub: ['기록 • 분석 • 예측 • 목표', 'Log • Analyze • Forecast • Goal'], quick: ['지금 흡연 기록 (+1)', 'Log a cigarette now (+1)'],
+            sub: ['기록 • 분석 • 목표', 'Log • Analyze • Goal'], quick: ['지금 흡연 기록 (+1)', 'Log a cigarette now (+1)'],
             fDate: ['날짜', 'Date'], fTime: ['시간', 'Time'], fCount: ['개수', 'Count'], fNote: ['메모 (선택)', 'Note (optional)'],
             notePh: ['스트레스, 커피 등', 'Stress, coffee, etc.'], addManual: ['지정 날짜로 기록 추가', 'Add record for this date'],
             today: ['오늘 흡연', 'Today'], report: ['리포트', 'Report'],
             hHourly: ['시간대별 흡연량 (전체 기간)', 'By hour of day (all time)'], hDaily: ['일별 추이 (최근 30일)', 'Daily trend (last 30 days)'],
+            hForecast: ['예측 기간', 'Forecast period'],
             hCost: ['월별 담배 지출', 'Monthly spending'], hCount: ['월별 총 흡연 갯수', 'Monthly total'],
             hGoal: ['하루 목표 · 절약', 'Daily goal · Savings'], hRecent: ['최근 기록', 'Recent records'],
             hSync: ['계정 · 동기화 (선택)', 'Account · Sync (optional)'], hData: ['데이터 관리', 'Data'], hView: ['화면 설정', 'Display'],
