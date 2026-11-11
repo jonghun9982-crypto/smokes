@@ -181,6 +181,12 @@
         html.light .tabbar { background: rgba(255,253,249,0.92); border-top-color: #e4dccf; }
         html.light .tabbar button { color: #8a8178; }
         html.light .tabbar button.on { color: #1c1917; }
+        .forecast-chip { flex-shrink: 0; margin-top: 1px; padding: 3px 9px; border-radius: 9999px; border: 1px solid #52525b; background: transparent; color: #a1a1aa; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.35; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+        .forecast-chip[aria-pressed="true"] { border-color: #a1a1aa; background: rgba(161,161,170,0.2); color: #e4e4e7; }
+        .forecast-chip[aria-disabled="true"] { opacity: 0.55; border-color: #3f3f46; color: #71717a; }
+        html.light .forecast-chip { border-color: #d6d3d1; color: #78716c; }
+        html.light .forecast-chip[aria-pressed="true"] { border-color: #a8a29e; background: rgba(120,113,108,0.14); color: #44403c; }
+        html.light .forecast-chip[aria-disabled="true"] { border-color: #e7e5e4; color: #a8a29e; }
         html.light .start-scr { background: rgba(247,243,236,0.78); color: #1c1917; }
         html.light .start-scr p, html.light .start-scr .skip { color: #57534e; }
         html.light .start-scr .gbtn { background: rgba(255,255,255,0.7); border-color: #ded5c7; color: #1c1917; }
@@ -313,22 +319,20 @@
 
         <!-- 시간대별 흡연량 -->
         <div data-tab="ana" class="px-6 mb-6">
-            <h3 class="text-sm text-zinc-400 mb-2 px-1" data-i18n="hHourly">시간대별 흡연량 (전체 기간)</h3>
+            <div class="flex items-start justify-between gap-2 mb-2 px-1">
+                <h3 class="text-sm text-zinc-400 min-w-0" data-i18n="hHourly" style="word-break:keep-all">시간대별 흡연량 (전체 기간)</h3>
+                <button type="button" id="forecast-toggle-btn" onclick="toggleForecast()" class="forecast-chip" aria-pressed="false">예측 β</button>
+            </div>
             <div class="bg-zinc-800 rounded-3xl p-4">
                 <div class="chart-container h-[220px]">
                     <canvas id="hourly-bar-chart"></canvas>
                 </div>
+                <div id="hourly-forecast-note" class="hidden mt-2 text-[11px] text-zinc-500 leading-snug" style="word-break:keep-all"></div>
                 <div class="report-wrap">
                     <button type="button" class="report-btn" onclick="toggleReport('hourly', this)" aria-expanded="false" aria-controls="report-hourly"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-hourly" class="report-box hidden"></div>
                 </div>
             </div>
-        </div>
-
-        <!-- P3: 예측은 기본 숨김. 예측 보기 버튼으로 30일 예측만 켜고 끔 (기간 선택은 제거) -->
-        <div data-tab="ana" class="px-6 mb-5" id="forecast-toggle-wrap">
-            <button type="button" id="forecast-toggle-btn" onclick="toggleForecast()" class="w-full min-h-[44px] py-3 rounded-2xl bg-zinc-800 border border-zinc-700 text-sm font-semibold text-zinc-200" style="-webkit-tap-highlight-color:transparent;word-break:keep-all" aria-pressed="false">예측 보기</button>
-            <p id="forecast-toggle-note" class="hidden text-sm text-zinc-500 text-center px-1 leading-snug" style="word-break:keep-all"></p>
         </div>
 
         <!-- 일별 추이 -->
@@ -343,14 +347,10 @@
                     <button type="button" class="report-btn" onclick="toggleReport('daily', this)" aria-expanded="false" aria-controls="report-daily"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
                     <div id="report-daily" class="report-box hidden"></div>
                 </div>
-            </div>
-        </div>
-
-        <div data-tab="ana" class="hidden px-6 mb-6" id="forecast-insight-wrap">
-            <div id="prediction-insight" class="text-sm text-zinc-300 bg-zinc-800 rounded-3xl p-4 leading-snug" style="word-break:keep-all"></div>
-            <div class="report-wrap px-1">
-                <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="report">리포트</span></button>
-                <div id="report-prediction" class="report-box hidden"></div>
+                <div id="forecast-report-wrap" class="hidden report-wrap">
+                    <button type="button" class="report-btn" onclick="toggleReport('prediction', this)" aria-expanded="false" aria-controls="report-prediction"><svg class="report-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="13" r="4"/><circle cx="17" cy="13" r="4"/><path d="M11 12.2q1-1 2 0"/><path d="M3.2 12 1.5 9.5"/><path d="M20.8 12 22.5 9.5"/></svg><span class="report-label" data-i18n="reportForecast">예측 리포트</span></button>
+                    <div id="report-prediction" class="report-box hidden"></div>
+                </div>
             </div>
         </div>
 
@@ -702,7 +702,7 @@
             return Object.keys(map).sort().map(date => ({ date, count: map[date] }));
         }
 
-        // P1: 예측은 분석의 일별·월별 차트에만 (시간대별은 그대로). 계산은 기존 calculateForecast / calculateLongForecast 그대로
+        // P4: 예측 끄면 시간대별은 v19와 같은 빨간 선만. 켜면 회색 점선(최근 14일 패턴을 전체 기간 규모로) + 일별·월별 예측
         const FC_MUTE_BG = 'rgba(161, 161, 170, 0.28)';
         const FC_MUTE_BD = 'rgba(161, 161, 170, 0.95)';
         let forecastOpen = false;  // P3: 예측 표시 여부. 저장하지 않음 — 매번 현황부터 시작
@@ -715,22 +715,22 @@
         function updateForecastToggle() {
             const enough = getDailyTotals().length >= 7;
             const btn = document.getElementById('forecast-toggle-btn');
-            const note = document.getElementById('forecast-toggle-note');
+            const hint = L('예측은 7일 이상 기록이 필요해요.', 'Forecast needs 7+ days of records.');
             if (btn) {
-                btn.classList.toggle('hidden', !enough);
-                btn.textContent = forecastOpen ? L('예측 숨기기', 'Hide forecast') : L('예측 보기', 'Show forecast');
                 btn.setAttribute('aria-pressed', forecastOn() ? 'true' : 'false');
-                btn.classList.toggle('bg-zinc-700', forecastOn());
-                btn.classList.toggle('border-zinc-500', forecastOn());
-            }
-            if (note) {
-                note.classList.toggle('hidden', enough);
-                note.textContent = enough ? '' : L('예측은 7일 이상 기록이 필요해요.', 'Forecast needs 7+ days of records.');
+                btn.setAttribute('aria-disabled', enough ? 'false' : 'true');
+                if (enough) {
+                    btn.textContent = L('예측 β', 'Forecast β');
+                    btn.removeAttribute('title');
+                    btn.setAttribute('aria-label', forecastOn() ? L('예측 숨기기', 'Hide forecast') : L('예측 보기', 'Show forecast'));
+                } else {
+                    btn.textContent = L('예측 · 7일+', 'Forecast · 7d+');
+                    btn.setAttribute('title', hint);
+                    btn.setAttribute('aria-label', hint);
+                }
             }
             const on = forecastOn();
-            const insight = document.getElementById('forecast-insight-wrap');
-            if (insight) insight.classList.toggle('hidden', !on);
-            ['daily-forecast-note', 'monthly-cost-forecast', 'monthly-count-forecast'].forEach(id => {
+            ['daily-forecast-note', 'monthly-cost-forecast', 'monthly-count-forecast', 'hourly-forecast-note', 'forecast-report-wrap'].forEach(id => {
                 const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !on);
             });
         }
@@ -741,6 +741,7 @@
         }
         function applyForecastView() {
             updateForecastToggle();
+            renderHourlyBarChart();
             renderDailyTrendChart();
             renderMonthlyCostChart();
             renderMonthlyCountChart();
@@ -849,6 +850,27 @@
             return `<div class="text-zinc-300 font-medium">${week}</div><div class="mt-0.5">${fwd}</div><div class="mt-1 text-[11px] text-zinc-500">${legend}</div>`;
         }
 
+        function hourlyForecastTotals() {
+            // 빨간 선과 같은 단위: 전체 기간 그 시간대의 총 개비.
+            // 최근 최대 14일의 시간대별 일평균 × 전체 기간(첫 기록일~오늘) 일수.
+            if (!records.length) return Array(24).fill(0);
+            const dayKey = d => d.toLocaleDateString('sv-SE');
+            const todayStr = dayKey(new Date());
+            let firstStr = todayStr;
+            records.forEach(r => { const k = dayKey(new Date(r.datetime)); if (k < firstStr) firstStr = k; });
+            const first = new Date(firstStr + 'T00:00:00'), end = new Date(todayStr + 'T00:00:00');
+            const spanDays = Math.max(1, Math.round((end - first) / 864e5) + 1);
+            const win = Math.min(14, spanDays);
+            const start = new Date(end); start.setDate(end.getDate() - (win - 1));
+            const startStr = dayKey(start);
+            const sums = Array(24).fill(0);
+            records.forEach(r => {
+                const d = new Date(r.datetime), k = dayKey(d);
+                if (k >= startStr && k <= todayStr) sums[d.getHours()] += Number(r.count) || 0;
+            });
+            return { data: sums.map(v => Math.round(v / win * spanDays * 10) / 10), win, spanDays };
+        }
+
         function renderHourlyBarChart() {
             if (hourlyBarChartInstance) hourlyBarChartInstance.destroy();
             const hourly = Array(24).fill(0);
@@ -857,12 +879,7 @@
                 hourly[hour] += r.count;
             });
 
-            const ctx = document.getElementById('hourly-bar-chart');
-            hourlyBarChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: Array.from({length:24}, (_, i) => L(`${i}시`, `${i}h`)),
-                    datasets: [{
+            const datasets = [{
                         label: L('흡연량', 'Count'),
                         data: hourly,
                         borderColor: '#f87171',
@@ -875,7 +892,33 @@
                         pointHitRadius: 0,
                         pointHoverRadius: 3,
                         pointHoverBackgroundColor: '#f87171'
-                    }]
+                    }];
+            let fcMeta = null;
+            if (forecastOn()) {
+                fcMeta = hourlyForecastTotals();
+                datasets.push({
+                    label: L('요즘 2주 습관', 'Last 2 weeks'),
+                    data: fcMeta.data,
+                    borderColor: FC_MUTE_BD,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    tension: 0.4,
+                    cubicInterpolationMode: 'monotone',
+                    fill: false,
+                    pointRadius: 0,
+                    pointHitRadius: 0,
+                    pointHoverRadius: 3,
+                    pointHoverBackgroundColor: FC_MUTE_BD
+                });
+            }
+
+            const ctx = document.getElementById('hourly-bar-chart');
+            hourlyBarChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length:24}, (_, i) => L(`${i}시`, `${i}h`)),
+                    datasets
                 },
                 options: {
                     responsive: true,
@@ -885,6 +928,11 @@
                     scales: { y: { beginAtZero: true, grid: { color: gridColor() }, ticks: { stepSize: 5 } } }
                 }
             });
+            const note = document.getElementById('hourly-forecast-note');
+            if (note) {
+                if (fcMeta) note.textContent = L('회색 점선 = 요즘 2주 습관', 'Gray dashed = your last 2 weeks');
+                else note.textContent = '';
+            }
         }
 
         function renderMonthlyCostChart() {
@@ -1075,36 +1123,7 @@
             }
         }
 
-        function fillForecastInsight() {
-            const el = document.getElementById('prediction-insight');
-            if (!el) return;
-            if (!forecastOn()) { el.innerHTML = ''; return; }
-            const dailyData = getDailyTotals();
-            if (dailyData.length < 7) {
-                el.innerHTML = L(`예측은 7일 이상 기록이 필요해요. (현재 ${dailyData.length}일)`, `Forecast needs 7+ days of records (current: ${dailyData.length}).`);
-                return;
-            }
-            const days = 30;
-            const predictions = calculateForecast(dailyData, days);
-            const avgRecent = dailyData.slice(-7).reduce((a,b)=>a+b.count,0) / 7;
-            const totalPred = predictions.reduce((a,b)=>a+b.count,0);
-            const avgFuture = totalPred / predictions.length;
-            const change = avgRecent > 0 ? ((avgFuture - avgRecent) / avgRecent * 100).toFixed(1) : '0.0';
-
-            let text = '';
-            if (change > 10) text = L(`최근 7일 평균 대비 <span class="text-zinc-200 font-medium">+${change}%</span> 증가 예상`, `Expected <span class="text-zinc-200 font-medium">+${change}%</span> vs. last 7-day average`);
-            else if (change < -10) text = L(`최근 대비 <span class="text-emerald-400">${change}%</span> 감소 예상`, `Expected <span class="text-emerald-400">${change}%</span> vs. recent`);
-            else text = L(`최근과 비슷한 수준을 유지할 것으로 예상됩니다.`, `Expected to stay about the same as recently.`);
-
-            const label = periodLabel(days);
-            const totalCost = Math.round(totalPred * pricePerCig());
-            const packs = (totalPred / CIGARETTES_PER_PACK).toFixed(1);
-            text += `<div class="mt-3 grid grid-cols-2 gap-2 text-center">
-                <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`${label} 예상 흡연량`, `${label} expected total`)}</div><div class="text-lg font-bold text-white">${L(`${Math.round(totalPred).toLocaleString()}개비`, `${Math.round(totalPred).toLocaleString()} cigs`)}</div><div class="text-xs text-zinc-500">${L(`약 ${packs}갑 · 하루 ${avgFuture.toFixed(1)}개비`, `~${packs} packs · ${avgFuture.toFixed(1)}/day`)}</div></div>
-                <div class="bg-zinc-900/60 rounded-xl p-2"><div class="text-xs text-zinc-400">${L(`예상 비용`, `Expected cost`)}</div><div class="text-lg font-bold text-white">${wonText(totalCost)}</div><div class="text-xs text-zinc-500">${L(`1갑 ${packPrice().toLocaleString()}원 기준`, `Based on ₩${packPrice().toLocaleString()}/pack`)}</div></div>
-            </div>`;
-            el.innerHTML = text;
-        }
+        function fillForecastInsight() { /* P4: 예측 요약 카드 제거. 호출부는 그대로 두어 깨지지 않게 */ }
 
         function showPrediction() {
             if (window.showTab) window.showTab('ana');
@@ -2399,7 +2418,7 @@
             sub: ['기록 • 분석 • 목표', 'Log • Analyze • Goal'], quick: ['지금 흡연 기록 (+1)', 'Log a cigarette now (+1)'],
             fDate: ['날짜', 'Date'], fTime: ['시간', 'Time'], fCount: ['개수', 'Count'], fNote: ['메모 (선택)', 'Note (optional)'],
             notePh: ['스트레스, 커피 등', 'Stress, coffee, etc.'], addManual: ['지정 날짜로 기록 추가', 'Add record for this date'],
-            today: ['오늘 흡연', 'Today'], report: ['리포트', 'Report'],
+            today: ['오늘 흡연', 'Today'], report: ['리포트', 'Report'], reportForecast: ['예측 리포트', 'Forecast report'],
             hHourly: ['시간대별 흡연량 (전체 기간)', 'By hour of day (all time)'], hDaily: ['일별 추이 (최근 30일)', 'Daily trend (last 30 days)'],
             hForecast: ['예측 기간', 'Forecast period'],
             hCost: ['월별 담배 지출', 'Monthly spending'], hCount: ['월별 총 흡연 갯수', 'Monthly total'],
