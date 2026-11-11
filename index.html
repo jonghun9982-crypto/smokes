@@ -719,9 +719,12 @@
             return Object.keys(map).sort().map(date => ({ date, count: map[date] }));
         }
 
-        // P4: 예측 끄면 시간대별은 v19와 같은 빨간 선만. 켜면 회색 점선(최근 14일 패턴을 전체 기간 규모로) + 일별·월별 예측
-        const FC_MUTE_BG = 'rgba(161, 161, 170, 0.28)';
-        const FC_MUTE_BD = 'rgba(161, 161, 170, 0.95)';
+        // P7: 예측 끄면 시간대별은 v21/v19와 같은 빨간 선만. 켜면 청록 점선(최근 14일 패턴을 전체 기간 규모로) + 일별·월별 예측
+        function fcStyle() {
+            return isLight()
+                ? { fill: 'rgba(13, 148, 136, 0.28)', border: '#0d9488', line: '#0d9488' }
+                : { fill: 'rgba(45, 212, 191, 0.25)', border: '#2dd4bf', line: '#5eead4' };
+        }
         let forecastOpen = false;  // P3: 예측 표시 여부. 저장하지 않음 — 매번 현황부터 시작
         function forecastOn() { return forecastOpen && getDailyTotals().length >= 7; }
         function getForecastDays() {
@@ -796,11 +799,12 @@
                         order: 2
                     }];
             if (fut.length) {
+                const fc = fcStyle();
                 datasets.push({
                         label: L('예측', 'Forecast'),
                         data: forecast,
-                        backgroundColor: FC_MUTE_BG,
-                        borderColor: FC_MUTE_BD,
+                        backgroundColor: fc.fill,
+                        borderColor: fc.border,
                         borderWidth: 1.5,
                         borderDash: [4, 3],
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
@@ -810,13 +814,13 @@
                         type: 'line',
                         label: L('예측 추이', 'Forecast trend'),
                         data: line,
-                        borderColor: FC_MUTE_BD,
+                        borderColor: fc.line,
                         backgroundColor: 'transparent',
                         borderWidth: 2,
                         borderDash: [5, 4],
                         pointRadius: 2,
                         pointHitRadius: 8,
-                        pointBackgroundColor: FC_MUTE_BD,
+                        pointBackgroundColor: fc.line,
                         tension: 0,
                         fill: false,
                         order: 1
@@ -859,7 +863,7 @@
             const weekTot = Math.round(actual + future);
             const periodTot = Math.round(preds.reduce((a, b) => a + b.count, 0));
             const periodCost = Math.round(preds.reduce((a, b) => a + b.count, 0) * pricePerCig());
-            const legend = L('회색 점선 = 예측', 'dashed gray = forecast');
+            const legend = L('청록 점선 = 예측', 'teal dashed = forecast');
             const week = futureN
                 ? L(`이번 주 예상 ${weekTot}개비 (지금까지 ${Math.round(actual)} · 남은 ${futureN}일 ${Math.round(future)})`, `This week expected ${weekTot} (so far ${Math.round(actual)} · ${futureN} days left ${Math.round(future)})`)
                 : L(`이번 주 예상 ${weekTot}개비`, `This week expected ${weekTot}`);
@@ -914,9 +918,9 @@
             if (forecastOn()) {
                 fcMeta = hourlyForecastTotals();
                 datasets.push({
-                    label: L('요즘 2주 습관', 'Last 2 weeks'),
+                    label: L('최근 14일 패턴', 'Last 14-day pattern'),
                     data: fcMeta.data,
-                    borderColor: FC_MUTE_BD,
+                    borderColor: fcStyle().line,
                     backgroundColor: 'transparent',
                     borderWidth: 2,
                     borderDash: [5, 4],
@@ -926,7 +930,7 @@
                     pointRadius: 0,
                     pointHitRadius: 0,
                     pointHoverRadius: 3,
-                    pointHoverBackgroundColor: FC_MUTE_BD
+                    pointHoverBackgroundColor: fcStyle().line
                 });
             }
 
@@ -947,7 +951,7 @@
             });
             const note = document.getElementById('hourly-forecast-note');
             if (note) {
-                if (fcMeta) note.textContent = L('회색 점선 = 요즘 2주 습관', 'Gray dashed = your last 2 weeks');
+                if (fcMeta) note.textContent = L(`청록 점선 = 최근 ${fcMeta.win}일 시간대 평균 × 전체 ${fcMeta.spanDays}일`, `Teal dashed = last ${fcMeta.win}-day hourly average × ${fcMeta.spanDays} days (all-time scale)`);
                 else note.textContent = '';
             }
         }
@@ -991,8 +995,8 @@
             if (showFc) costSets.push({
                         label: L('예측', 'Forecast'),
                         data: costFc.forecast,
-                        backgroundColor: FC_MUTE_BG,
-                        borderColor: FC_MUTE_BD,
+                        backgroundColor: fcStyle().fill,
+                        borderColor: fcStyle().border,
                         borderWidth: 1.5,
                         borderDash: [4, 3],
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
@@ -1055,8 +1059,8 @@
             if (showFc) countSets.push({
                         label: L('예측', 'Forecast'),
                         data: countFc.forecast,
-                        backgroundColor: FC_MUTE_BG,
-                        borderColor: FC_MUTE_BD,
+                        backgroundColor: fcStyle().fill,
+                        borderColor: fcStyle().border,
                         borderWidth: 1.5,
                         borderDash: [4, 3],
                         borderRadius: BAR_RADIUS, borderSkipped: BAR_SKIPPED,
@@ -1105,7 +1109,7 @@
                 note = remain
                     ? L(`이번 달 예상 ${totDisp} (남은 기간 ${remDisp})`, `This month expected ${totDisp} (remaining ${remDisp})`)
                     : L(`이번 달 예상 ${totDisp}`, `This month expected ${totDisp}`);
-                note += `<div class="text-[11px] text-zinc-500 mt-0.5">${L('회색 점선 = 예측', 'dashed gray = forecast')}</div>`;
+                note += `<div class="text-[11px] text-zinc-500 mt-0.5">${L('청록 점선 = 예측', 'teal dashed = forecast')}</div>`;
             }
             return { labels: lab, actual, forecast, note, remain, total, soFar };
         }
