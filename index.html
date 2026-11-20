@@ -1045,7 +1045,7 @@
             const labels = sortedMonths.map(m => L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1]));
             const costs = sortedMonths.map(month => Math.round(monthlyMap[month] * pricePerCig()));
 
-            const currentMonth = new Date().toISOString().slice(0, 7);
+            const currentMonth = localDateStr(new Date()).slice(0, 7);   // P10: 월 키도 현지 시간 기준
             const currentMonthCost = monthlyMap[currentMonth] ? Math.round(monthlyMap[currentMonth] * pricePerCig()) : 0;
 
             document.getElementById('monthly-cost-summary').innerHTML = `
@@ -1109,7 +1109,7 @@
             const labels = sortedMonths.map(m => L(m.slice(5) + '월', MON_EN[Number(m.slice(5)) - 1]));
             const counts = sortedMonths.map(month => monthlyMap[month]);
 
-            const currentMonth = new Date().toISOString().slice(0, 7);
+            const currentMonth = localDateStr(new Date()).slice(0, 7);   // P10: 월 키도 현지 시간 기준
             const currentMonthCount = monthlyMap[currentMonth] || 0;
 
             document.getElementById('monthly-count-summary').innerHTML = `
@@ -2270,7 +2270,7 @@
         }
         function exportToCSV() {
             if (records.length === 0) return alert(L('데이터가 없습니다.', 'No data.'));
-            downloadCSV(buildCSV(records), `흡연기록_${new Date().toISOString().slice(0,10)}.csv`);
+            downloadCSV(buildCSV(records), `흡연기록_${localDateStr(new Date())}.csv`);
             if (window.smokesCount) window.smokesCount('smokes-backup', 'CSV 내보내기');
         }
 
@@ -2677,13 +2677,38 @@
             renderMigrateBanner();
             setPredictionPeriod(30);
             loadData();
-            const dateInput = document.getElementById('manual-date');
-            const timeInput = document.getElementById('manual-time');
-            const now = new Date();
-            dateInput.value = now.toISOString().split('T')[0];
-            timeInput.value = now.toTimeString().slice(0,5);
+            setManualDefaults(true);   // P10: 기기 지역 시간 기준 오늘 날짜·지금 시각
             renderAll();
         }
+
+        // P10: 사용 국가·지역 시간 동기화 — 날짜/시간 기본값을 기기 현지 시간으로 (UTC 날짜 X)
+        function localDateStr(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+        function localTimeStr(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+        const manualTouched = { date: false, time: false };   // 직접 고친 칸은 자동으로 덮어쓰지 않음
+        function setManualDefaults(force) {
+            const di = document.getElementById('manual-date'), ti = document.getElementById('manual-time');
+            if (!di || !ti) return;
+            const now = new Date();
+            if (force || !manualTouched.date) di.value = localDateStr(now);
+            if (force || !manualTouched.time) ti.value = localTimeStr(now);
+            if (force) { manualTouched.date = false; manualTouched.time = false; }
+        }
+        (function () {
+            const di = document.getElementById('manual-date'), ti = document.getElementById('manual-time');
+            if (di) ['input', 'change'].forEach(ev => di.addEventListener(ev, () => { manualTouched.date = true; }));
+            if (ti) ['input', 'change'].forEach(ev => ti.addEventListener(ev, () => { manualTouched.time = true; }));
+            // 앱을 켜 둔 채 밤을 넘기거나 다시 열었을 때, 손대지 않은 칸만 지금 날짜·시각으로 새로고침
+            let shownDay = localDateStr(new Date());
+            const refresh = () => {
+                if (document.visibilityState !== 'visible') return;
+                setManualDefaults(false);
+                const d = localDateStr(new Date());
+                if (d !== shownDay) { shownDay = d; try { renderAll(); } catch (e) {} }   // 날짜가 바뀌었으면 '오늘 흡연' 등 다시 그림
+            };
+            document.addEventListener('visibilitychange', refresh);
+            window.addEventListener('focus', refresh);
+            window.addEventListener('pageshow', refresh);
+        })();
 
         window.onload = init;
     </script>
